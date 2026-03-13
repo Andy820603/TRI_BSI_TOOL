@@ -380,6 +380,14 @@
             5. 分析執行 (點擊展開/收合) ▼
         </h3>
         <div id="runDetails">
+            <div class="settings-group" style="margin-bottom:10px;">
+                <label for="mcIterationsInput" style="margin-bottom:6px;">Monte Carlo 迭代次數（速度 vs 品質）</label>
+                <input id="mcIterationsInput" type="number" min="200" max="200000" step="100" value="5000">
+            </div>
+            <div class="settings-group" style="margin-bottom:10px;">
+                <label for="unsafePenaltyInput" style="margin-bottom:6px;">unsafe 罰則強度（越大越避開相鄰）</label>
+                <input id="unsafePenaltyInput" type="number" min="100" max="1000000" step="100" value="10000">
+            </div>
             <button id="analyzeBtn" onclick="startAnalysis()" disabled>🚀 開始分析</button>
             <div id="logArea">等待檔案載入...</div>
         </div>
@@ -404,13 +412,18 @@
             <button class="btn-small" onclick="addManualGroup()">新增</button>
         </div>
         <div id="manualGroupSpecBox" class="manual-group-spec">
-            <div style="font-size:12px; color:#aaa; margin-bottom:6px;">勾選式分群設定</div>
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                <label for="groupAssignSelect" style="display:inline; margin:0; color:#aaa;">目前編輯 Group</label>
-                <select id="groupAssignSelect" style="background:#2d2d2d; color:#fff; border:1px solid #555; border-radius:4px; padding:4px 6px;"></select>
-                <button class="btn-small" onclick="refreshGroupAssignControls()">重新整理</button>
+            <div style="font-size:12px; color:#aaa; margin-bottom:6px; cursor:pointer; user-select:none;"
+                 onclick="toggleDiv('manualGroupSpecDetails')">
+                勾選式分群設定（點擊展開/收合）▼
             </div>
-            <div class="checkbox-grid" id="groupAssignArea" style="max-height: 210px;"></div>
+            <div id="manualGroupSpecDetails">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <label for="groupAssignSelect" style="display:inline; margin:0; color:#aaa;">目前編輯 Group</label>
+                    <select id="groupAssignSelect" style="background:#2d2d2d; color:#fff; border:1px solid #555; border-radius:4px; padding:4px 6px;"></select>
+                    <button class="btn-small" onclick="refreshGroupAssignControls()">重新整理</button>
+                </div>
+                <div class="checkbox-grid" id="groupAssignArea" style="max-height: 210px;"></div>
+            </div>
         </div>
 
         <div class="cards-container" id="cardsContainer"></div>
@@ -537,6 +550,8 @@
         bannedInput: 'netlistAnalyzer.bannedInput',
         capInput: 'netlistAnalyzer.capInput',
         pinIgnoreInput: 'netlistAnalyzer.pinIgnoreInput',
+        mcIterations: 'netlistAnalyzer.mcIterations',
+        unsafePenalty: 'netlistAnalyzer.unsafePenalty',
         enableGlobalFilter: 'netlistAnalyzer.enableGlobalFilter',
         enableCapFilter: 'netlistAnalyzer.enableCapFilter',
         enablePinFilter: 'netlistAnalyzer.enablePinFilter'
@@ -970,6 +985,8 @@
         document.getElementById('bannedInput').value = loadSetting(STORAGE_KEYS.bannedInput, DEFAULT_BANNED.join(', '));
         document.getElementById('capInput').value = loadSetting(STORAGE_KEYS.capInput, DEFAULT_CAP_IGNORE.join(', '));
         document.getElementById('pinIgnoreInput').value = loadSetting(STORAGE_KEYS.pinIgnoreInput, DEFAULT_PIN_IGNORE.join(', '));
+        document.getElementById('mcIterationsInput').value = loadSetting(STORAGE_KEYS.mcIterations, 5000);
+        document.getElementById('unsafePenaltyInput').value = loadSetting(STORAGE_KEYS.unsafePenalty, 10000);
         refreshModeConnectorOptions();
 
         document.getElementById('enableGlobalFilter').checked = loadSetting(STORAGE_KEYS.enableGlobalFilter, true);
@@ -1010,6 +1027,12 @@
         });
         document.getElementById('pinIgnoreInput').addEventListener('input', (e) => {
             saveSetting(STORAGE_KEYS.pinIgnoreInput, e.target.value);
+        });
+        document.getElementById('mcIterationsInput').addEventListener('input', (e) => {
+            saveSetting(STORAGE_KEYS.mcIterations, e.target.value);
+        });
+        document.getElementById('unsafePenaltyInput').addEventListener('input', (e) => {
+            saveSetting(STORAGE_KEYS.unsafePenalty, e.target.value);
         });
 
         document.getElementById('enableGlobalFilter').addEventListener('change', (e) => {
@@ -1146,6 +1169,8 @@
         if (!rawFileContent) return;
         const showOnlyWithChain = document.getElementById('showOnlyWithChain').checked;
         const testCardModeSets = buildModeSetsFromCheckboxes();
+        const mcIterations = Math.max(200, Math.min(200000, Number(document.getElementById('mcIterationsInput')?.value || 5000)));
+        const unsafePenaltyWeight = Math.max(100, Math.min(1000000, Number(document.getElementById('unsafePenaltyInput')?.value || 10000)));
 
         const checkedTargets = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
         const manualTargets = parseInputList('targetInput');
@@ -1164,6 +1189,7 @@
         const isPinIgnored = (net) => isWildcardMatch(net, pinIgnoreList);
 
         log(`開始分析... 目標數: ${selectedTargets.length}`);
+        log(`Loop 配對參數: MC=${mcIterations}, unsafePenalty=${unsafePenaltyWeight}`);
 
         const lines = rawFileContent.split(/\r?\n/);
         let dPinsByPart = {}, dPartsByNet = {}, dNetByPartPin = {};
@@ -1237,7 +1263,16 @@
             'LinkTarget',
             'LinkTarget_Pin',
             'LinkTarget_PinName',
-            'LinkTarget_NetNAME'
+            'LinkTarget_NetNAME',
+            'loopTarget',
+            'loopTarget_Pin',
+            'loopTarget_PinName',
+            'loopTarget_NetNAME',
+            'loopLinkTarget',
+            'loopLinkTarget_Pin',
+            'loopLinkTarget_PinName',
+            'loopLinkTarget_NetNAME',
+            'LOOP_PIN_DISTANCE'
         ];
 
         function detectPullHighInfo(testNet) {
@@ -1257,16 +1292,17 @@
             return Array.from(voltages).join('/');
         }
 
+        const loopModeSet = testCardModeSets['loop'] || new Set();
+        const singleModeSet = testCardModeSets['single-end'] || new Set();
+
         function resolveMode(testTarget, linkTarget) {
             if (!testTarget || !linkTarget) return '';
             const a = String(testTarget).toUpperCase();
             const b = String(linkTarget).toUpperCase();
-            const loopSet = testCardModeSets['loop'] || new Set();
-            const singleSet = testCardModeSets['single-end'] || new Set();
-            const aLoop = loopSet.has(a);
-            const bLoop = loopSet.has(b);
-            const aSingle = singleSet.has(a);
-            const bSingle = singleSet.has(b);
+            const aLoop = loopModeSet.has(a);
+            const bLoop = loopModeSet.has(b);
+            const aSingle = singleModeSet.has(a);
+            const bSingle = singleModeSet.has(b);
 
             // Rule: one side is loop => loop; both loop => empty.
             if ((aLoop || bLoop) && !(aLoop && bLoop)) return 'loop';
@@ -1275,6 +1311,275 @@
             // Keep previous behavior for single-end pair.
             if (aSingle && bSingle) return 'single-end';
             return '';
+        }
+
+        function buildLgaColMap() {
+            const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            // Keep legacy exclusions, but allow Q for this project pin naming.
+            const forbidden = new Set(['I', 'O', 'S', 'X', 'Z']);
+            const validCols = [];
+            for (const ch of alphabet) {
+                if (!forbidden.has(ch)) validCols.push(ch);
+            }
+            let stop = false;
+            for (const c1 of alphabet) {
+                if (forbidden.has(c1)) continue;
+                if (c1 > 'E') break;
+                for (const c2 of alphabet) {
+                    if (forbidden.has(c2)) continue;
+                    const code = c1 + c2;
+                    validCols.push(code);
+                    if (code === 'ET') {
+                        stop = true;
+                        break;
+                    }
+                }
+                if (stop) break;
+            }
+            const map = {};
+            validCols.forEach((code, idx) => { map[code] = idx; });
+            return map;
+        }
+
+        const LGA_COL_MAP = buildLgaColMap();
+
+        function getLgaYIndex(numText) {
+            const n = Number(numText);
+            if (!Number.isFinite(n) || n < 1 || n > 91 || n === 46) return -999;
+            return n < 46 ? n - 1 : n - 2;
+        }
+
+        function parseLgaCoordinate(pinName) {
+            const raw = String(pinName || '').trim();
+            const m = raw.match(/^([A-Za-z]+)\s*(\d+)$/);
+            if (!m) return { x: -999, y: -999, code: raw };
+            const alpha = m[1].toUpperCase();
+            const x = Object.prototype.hasOwnProperty.call(LGA_COL_MAP, alpha) ? LGA_COL_MAP[alpha] : -999;
+            const y = getLgaYIndex(m[2]);
+            return { x, y, code: `${alpha}${m[2]}` };
+        }
+
+        function parsePureNumericPin(pinName) {
+            const raw = String(pinName || '').trim();
+            if (!/^\d+$/.test(raw)) return null;
+            const n = Number(raw);
+            return Number.isFinite(n) ? n : null;
+        }
+
+        function isViolationFromDistancePair(pinAName, pinBName) {
+            const n1 = parsePureNumericPin(pinAName);
+            const n2 = parsePureNumericPin(pinBName);
+            if (n1 !== null && n2 !== null) {
+                // Pure numeric pin: only +/-1 is adjacent violation.
+                return Math.abs(n1 - n2) === 1;
+            }
+            const p1 = parseLgaCoordinate(pinAName);
+            const p2 = parseLgaCoordinate(pinBName);
+            if (p1.x === -999 || p1.y === -999 || p2.x === -999 || p2.y === -999) return false;
+            return isUnsafeLgaPair(p1, p2);
+        }
+
+        function isUnsafeLgaPair(p1, p2) {
+            return Math.abs(p1.x - p2.x) <= 2 && Math.abs(p1.y - p2.y) <= 1;
+        }
+
+        function isPreferredLoopDirection(testTarget, linkTarget) {
+            const a = String(testTarget || '').toUpperCase();
+            const b = String(linkTarget || '').toUpperCase();
+            const aSingle = singleModeSet.has(a);
+            const bSingle = singleModeSet.has(b);
+            const aLoop = loopModeSet.has(a);
+            const bLoop = loopModeSet.has(b);
+            // Expected direction: single-end side -> loop side.
+            if (aSingle && bLoop) return true;
+            // If single-end list is not complete, still allow non-loop -> loop direction.
+            if (!aLoop && bLoop && !bSingle) return true;
+            return false;
+        }
+
+        function getLoopEndpointFromPreferredRow(linkTarget, linkPin, linkPinName, linkNetName, bucketKey) {
+            const b = String(linkTarget || '').toUpperCase();
+            return {
+                target: linkTarget,
+                pin: linkPin,
+                pinName: linkPinName,
+                netName: linkNetName,
+                key: `${bucketKey}__${b}__${linkPin}`
+            };
+        }
+
+        function getExternalEndpointFromPreferredRow(testTarget, pin, testPinName, testNet) {
+            const a = String(testTarget || '').toUpperCase();
+            return {
+                target: testTarget,
+                pin: pin,
+                pinName: testPinName,
+                netName: testNet,
+                key: `${a}__${pin}`
+            };
+        }
+
+        function getLoopContextForRow(testTarget, pin, testPinName, testNet, linkTarget, linkPin, linkPinName, linkNetName) {
+            const a = String(testTarget || '').toUpperCase();
+            const b = String(linkTarget || '').toUpperCase();
+            const aLoop = loopModeSet.has(a);
+            const bLoop = loopModeSet.has(b);
+            if (aLoop === bLoop) return null; // only one side as loop
+
+            // single-end -> loop
+            if (!aLoop && bLoop) {
+                const bucketKey = `${b}@@${a}`;
+                return {
+                    preferred: true,
+                    bucketKey: bucketKey,
+                    endpoint: {
+                        target: linkTarget,
+                        pin: linkPin,
+                        pinName: linkPinName,
+                        netName: linkNetName,
+                        key: `${bucketKey}__${b}__${linkPin}`
+                    }
+                };
+            }
+
+            // loop -> single-end (still show same loop relationship info)
+            const bucketKey = `${a}@@${b}`;
+            return {
+                preferred: false,
+                bucketKey: bucketKey,
+                endpoint: {
+                    target: testTarget,
+                    pin: pin,
+                    pinName: testPinName,
+                    netName: testNet,
+                    key: `${bucketKey}__${a}__${pin}`
+                }
+            };
+        }
+
+        function buildLoopPairMap(loopCandidatesByTarget) {
+            const pairMap = {};
+
+            Object.keys(loopCandidatesByTarget).forEach(targetKey => {
+                const endpointMap = loopCandidatesByTarget[targetKey];
+                const nodes = Object.values(endpointMap);
+                const n = nodes.length;
+                if (n < 2) return;
+
+                function pairCost(i, j) {
+                    const ni = parsePureNumericPin(nodes[i].pinName);
+                    const nj = parsePureNumericPin(nodes[j].pinName);
+                    if (ni !== null && nj !== null) {
+                        const dist = Math.abs(ni - nj);
+                        const unsafePenalty = dist === 1 ? unsafePenaltyWeight : 0;
+                        return { score: dist + unsafePenalty, dist: Number(dist.toFixed(2)) };
+                    }
+                    const pi = parseLgaCoordinate(nodes[i].pinName);
+                    const pj = parseLgaCoordinate(nodes[j].pinName);
+                    // Always pair: unknown coordinates get heavy penalty but finite score.
+                    if (pi.x === -999 || pi.y === -999 || pj.x === -999 || pj.y === -999) {
+                        return { score: 1000000 + Math.abs(i - j), dist: 9999 };
+                    }
+                    const dx = pi.x - pj.x;
+                    const dy = pi.y - pj.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const unsafePenalty = isUnsafeLgaPair(pi, pj) ? unsafePenaltyWeight : 0;
+                    // Minimize distance first, unsafe as strong penalty but still pairable.
+                    return { score: dist + unsafePenalty, dist: Number(dist.toFixed(2)) };
+                }
+
+                function scoreMatching(pairs) {
+                    let s = 0;
+                    for (let k = 0; k < pairs.length; k++) {
+                        const [a, b] = pairs[k];
+                        s += pairCost(a, b).score;
+                    }
+                    return s;
+                }
+
+                function randomPerfectMatching(size) {
+                    const idx = Array.from({length: size}, (_, i) => i);
+                    for (let i = idx.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        const t = idx[i];
+                        idx[i] = idx[j];
+                        idx[j] = t;
+                    }
+                    const out = [];
+                    for (let i = 0; i + 1 < idx.length; i += 2) out.push([idx[i], idx[i + 1]]);
+                    return out;
+                }
+
+                function monteCarloBestMatching(size, iterations) {
+                    let bestPairs = randomPerfectMatching(size);
+                    let bestScore = scoreMatching(bestPairs);
+                    let curPairs = bestPairs.map(p => [p[0], p[1]]);
+                    let curScore = bestScore;
+
+                    for (let it = 0; it < iterations; it++) {
+                        let a = Math.floor(Math.random() * curPairs.length);
+                        let b = Math.floor(Math.random() * curPairs.length);
+                        if (a === b) continue;
+                        if (b < a) { const t = a; a = b; b = t; }
+                        const [a1, a2] = curPairs[a];
+                        const [b1, b2] = curPairs[b];
+                        const option1 = [[a1, b1], [a2, b2]];
+                        const option2 = [[a1, b2], [a2, b1]];
+                        const before = pairCost(a1, a2).score + pairCost(b1, b2).score;
+                        const after1 = pairCost(option1[0][0], option1[0][1]).score + pairCost(option1[1][0], option1[1][1]).score;
+                        const after2 = pairCost(option2[0][0], option2[0][1]).score + pairCost(option2[1][0], option2[1][1]).score;
+                        let chosen = null;
+                        let delta = 0;
+                        if (after1 <= after2) {
+                            chosen = option1;
+                            delta = after1 - before;
+                        } else {
+                            chosen = option2;
+                            delta = after2 - before;
+                        }
+                        // Simulated annealing style accept.
+                        const temp = Math.max(0.01, 1 - (it / iterations));
+                        const accept = delta <= 0 || Math.random() < Math.exp(-delta / temp);
+                        if (!accept) continue;
+                        curPairs[a] = chosen[0];
+                        curPairs[b] = chosen[1];
+                        curScore += delta;
+                        if (curScore < bestScore) {
+                            bestScore = curScore;
+                            bestPairs = curPairs.map(p => [p[0], p[1]]);
+                        }
+                    }
+                    return bestPairs;
+                }
+
+                const evenCount = n - (n % 2);
+                const pairs = monteCarloBestMatching(evenCount, Math.max(mcIterations, evenCount * 200));
+                pairs.forEach(([i, j]) => {
+                    const ni = nodes[i];
+                    const nj = nodes[j];
+                    const d = pairCost(i, j).dist;
+                    pairMap[ni.key] = {partner: nj, dist: d};
+                    pairMap[nj.key] = {partner: ni, dist: d};
+                });
+
+                // Odd count fallback: force the last node to nearest neighbor (still always paired for output).
+                if (n % 2 === 1) {
+                    const lastIdx = n - 1;
+                    let bestJ = 0;
+                    let bestScore = Number.POSITIVE_INFINITY;
+                    for (let j = 0; j < n - 1; j++) {
+                        const c = pairCost(lastIdx, j).score;
+                        if (c < bestScore) { bestScore = c; bestJ = j; }
+                    }
+                    const lastNode = nodes[lastIdx];
+                    const nearNode = nodes[bestJ];
+                    const d = pairCost(lastIdx, bestJ).dist;
+                    pairMap[lastNode.key] = {partner: nearNode, dist: d};
+                    if (!pairMap[nearNode.key]) pairMap[nearNode.key] = {partner: lastNode, dist: d};
+                }
+            });
+
+            return pairMap;
         }
 
         const linkMap = {};
@@ -1348,10 +1653,56 @@
         processSeries(dNetsByCap, () => '1149.6');
         processSeries(dNetsByRes, (comp) => comp);
 
+        // Build loopback pair plan only from single-end -> loop direction.
+        // Bucket by (loop connector + external single-end connector) so loopback returns to same single-end side.
+        const loopCandidatesByBucket = {};
+        const externalByLoopEndpointKey = {};
+        selectedTargets.forEach(target => {
+            if (!dPinsByPart[target]) return;
+            const sortedPins = Object.keys(dPinsByPart[target]).sort((a, b) =>
+                a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+            );
+            sortedPins.forEach(pin => {
+                const pinParts = dPinsByPart[target][pin];
+                const testPinName = getPinName(pinParts);
+                const testNet = getNetName(pinParts);
+                const links = linkMap[`${target}__${pin}`] || [];
+                links.forEach(link => {
+                    const linkPinParts = dPinsByPart[link.linkTarget] && dPinsByPart[link.linkTarget][link.linkPin]
+                        ? dPinsByPart[link.linkTarget][link.linkPin]
+                        : null;
+                    const linkPinName = linkPinParts ? getPinName(linkPinParts) : '';
+                    const linkNetName = link.linkNet || (linkPinParts ? getNetName(linkPinParts) : '');
+                    const mode = resolveMode(target, link.linkTarget);
+                    if (String(mode).toLowerCase() !== 'loop') return;
+                    const loopCtx = getLoopContextForRow(
+                        target, pin, testPinName, testNet,
+                        link.linkTarget, link.linkPin, linkPinName, linkNetName
+                    );
+                    if (!loopCtx || !loopCtx.preferred) return;
+                    const endpoint = loopCtx.endpoint;
+                    const external = getExternalEndpointFromPreferredRow(
+                        target, pin, testPinName, testNet
+                    );
+                    const targetKey = String(endpoint.target || '').toUpperCase();
+                    if (!targetKey || !loopModeSet.has(targetKey)) return;
+                    if (!loopCandidatesByBucket[loopCtx.bucketKey]) loopCandidatesByBucket[loopCtx.bucketKey] = {};
+                    if (!loopCandidatesByBucket[loopCtx.bucketKey][endpoint.key]) {
+                        loopCandidatesByBucket[loopCtx.bucketKey][endpoint.key] = endpoint;
+                    }
+                    if (!externalByLoopEndpointKey[endpoint.key]) {
+                        externalByLoopEndpointKey[endpoint.key] = external;
+                    }
+                });
+            });
+        });
+        const loopPairMap = buildLoopPairMap(loopCandidatesByBucket);
+
         // 3) one consolidated table per target.
         selectedTargets.forEach(target => {
             if (!dPinsByPart[target]) return;
             const rows = [];
+            const rowLoopMeta = [];
             const sortedPins = Object.keys(dPinsByPart[target]).sort((a, b) =>
                 a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
             );
@@ -1365,7 +1716,13 @@
 
                 if (links.length === 0) {
                     if (showOnlyWithChain) return;
-                    rows.push([target, pin, testPinName, testNet, '', pullHighVoltage, '', '', '', '', '', '']);
+                    rows.push([
+                        target, pin, testPinName, testNet, '', pullHighVoltage, '',
+                        '', '', '', '', '',
+                        '', '', '', '',
+                        '', '', '', '', ''
+                    ]);
+                    rowLoopMeta.push({violated: false, highlightHeaders: []});
                     return;
                 }
 
@@ -1377,6 +1734,21 @@
                     const linkNetName = link.linkNet || (linkPinParts ? getNetName(linkPinParts) : '');
                     const voltage = extractVoltageLevelFromNets(link.testNet, linkNetName);
                     const mode = resolveMode(target, link.linkTarget);
+                    const isLoop = String(mode).toLowerCase() === 'loop';
+                    const loopCtx = isLoop
+                        ? getLoopContextForRow(
+                            target, pin, testPinName, testNet,
+                            link.linkTarget, link.linkPin, linkPinName, linkNetName
+                        )
+                        : null;
+                    const loopEndpoint = loopCtx ? loopCtx.endpoint : null;
+                    const loopPairInfo = (loopEndpoint && loopPairMap[loopEndpoint.key]) ? loopPairMap[loopEndpoint.key] : null;
+                    const loopPair = loopPairInfo ? loopPairInfo.partner : null;
+                    const loopPairExternal = loopPair ? externalByLoopEndpointKey[loopPair.key] : null;
+                    const loopDistance = loopPairInfo ? loopPairInfo.dist : '';
+                    const baseHeaderForDistance = (loopCtx && loopCtx.preferred) ? 'LinkTarget_PinName' : 'TestCardTarget_PinName';
+                    const violatedByDistanceSource = !!(isLoop && loopEndpoint && loopPair &&
+                        isViolationFromDistancePair(loopEndpoint.pinName, loopPair.pinName));
 
                     rows.push([
                         target,
@@ -1390,8 +1762,21 @@
                         link.linkTarget,
                         link.linkPin,
                         linkPinName,
-                        linkNetName
+                        linkNetName,
+                        isLoop && loopPair ? loopPair.target : '',
+                        isLoop && loopPair ? loopPair.pin : '',
+                        isLoop && loopPair ? loopPair.pinName : '',
+                        isLoop && loopPair ? loopPair.netName : '',
+                        isLoop && loopPairExternal ? loopPairExternal.target : '',
+                        isLoop && loopPairExternal ? loopPairExternal.pin : '',
+                        isLoop && loopPairExternal ? loopPairExternal.pinName : '',
+                        isLoop && loopPairExternal ? loopPairExternal.netName : '',
+                        isLoop ? loopDistance : ''
                     ]);
+                    rowLoopMeta.push({
+                        violated: violatedByDistanceSource,
+                        highlightHeaders: (isLoop && loopPair) ? [baseHeaderForDistance, 'loopTarget_PinName'] : []
+                    });
                 });
             });
 
@@ -1412,11 +1797,53 @@
             });
             const typeTags = sortedChains.length > 0 ? sortedChains : ['No Link'];
 
+            const idxByHeader = {};
+            unifiedHeaders.forEach((h, i) => { idxByHeader[h] = i; });
+            const iLoopTarget = idxByHeader['loopTarget'];
+            const iLoopTargetPin = idxByHeader['loopTarget_Pin'];
+            const iLoopTargetPinName = idxByHeader['loopTarget_PinName'];
+            const iLoopTargetNet = idxByHeader['loopTarget_NetNAME'];
+            const iLoopLinkTarget = idxByHeader['loopLinkTarget'];
+            const iLoopLinkPin = idxByHeader['loopLinkTarget_Pin'];
+            const iLoopLinkPinName = idxByHeader['loopLinkTarget_PinName'];
+            const iLoopLinkNet = idxByHeader['loopLinkTarget_NetNAME'];
+            const iLoopDistance = idxByHeader['LOOP_PIN_DISTANCE'];
+
+            const loopDetails = [];
+            let loopMaxDistance = 0;
+            let loopViolationCount = 0;
+            rows.forEach((r, rowIdx) => {
+                if (!r || !r[iLoopTarget] || !r[iLoopLinkTarget]) return;
+                const dNum = Number(r[iLoopDistance]);
+                if (Number.isFinite(dNum) && dNum > loopMaxDistance) loopMaxDistance = dNum;
+                const violated = !!(rowLoopMeta[rowIdx] && rowLoopMeta[rowIdx].violated);
+                if (violated) loopViolationCount++;
+                loopDetails.push({
+                    loopTarget: r[iLoopTarget] || '',
+                    loopTargetPin: r[iLoopTargetPin] || '',
+                    loopTargetPinName: r[iLoopTargetPinName] || '',
+                    loopTargetNet: r[iLoopTargetNet] || '',
+                    loopLinkTarget: r[iLoopLinkTarget] || '',
+                    loopLinkPin: r[iLoopLinkPin] || '',
+                    loopLinkPinName: r[iLoopLinkPinName] || '',
+                    loopLinkNet: r[iLoopLinkNet] || '',
+                    loopDistance: r[iLoopDistance] || '',
+                    violated: violated
+                });
+            });
+
             globalAnalysisResults[`LINK_${target}`] = {
                 headers: unifiedHeaders,
                 data: rows,
                 type: typeTags[0],
-                typeTags: typeTags
+                typeTags: typeTags,
+                loopViolationByRow: rowLoopMeta,
+                loopSummary: {
+                    maxDistance: loopMaxDistance,
+                    violationCount: loopViolationCount,
+                    totalPairs: loopDetails.length,
+                    details: loopDetails
+                }
             };
         });
 
@@ -1508,6 +1935,9 @@
             };
             const badgesHtml = tags.map(renderTag).join(' ');
             const checkedAttr = cardSelectionMap[key] ? 'checked' : '';
+            const loopSummary = sheetData.loopSummary || {maxDistance: 0, violationCount: 0, totalPairs: 0, details: []};
+            const loopStatusText = loopSummary.violationCount > 0 ? `有違反 (${loopSummary.violationCount})` : '無違反';
+            const loopStatusColor = loopSummary.violationCount > 0 ? '#ff5c5c' : '#57b26a';
 
             card.innerHTML = `
                 <div class="card-header">
@@ -1519,6 +1949,10 @@
                 </div>
                 <div style="font-size:0.9em; color:#aaa; margin-bottom:10px;">
                     資料筆數: ${sheetData.data.length}
+                </div>
+                <div style="font-size:0.86em; color:#cfcfcf; margin-bottom:8px;">
+                    loop 最大距離: <span style="color:#9fd6ff;">${loopSummary.maxDistance || 0}</span>　
+                    規則檢查: <span style="background:${loopStatusColor}; color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px;">${loopStatusText}</span>
                 </div>
                 <div class="card-actions">
                     <button class="btn-small" onclick="previewSheet('${key}')">👁️ 檢視</button>
@@ -1628,8 +2062,32 @@
     function buildStyledWorksheet(d) {
         const ws = XLSX.utils.aoa_to_sheet([d.headers, ...d.data]);
         const chainIdx = Array.isArray(d.headers) ? d.headers.indexOf('Chain') : -1;
-        if (chainIdx < 0) return ws;
+        const loopStartIdx = Array.isArray(d.headers) ? d.headers.indexOf('loopTarget') : -1;
+        const loopEndIdx = Array.isArray(d.headers) ? d.headers.indexOf('LOOP_PIN_DISTANCE') : -1;
 
+        const totalRows = (Array.isArray(d.data) ? d.data.length : 0) + 1; // include header
+        if (loopStartIdx >= 0 && loopEndIdx >= loopStartIdx) {
+            for (let r = 0; r < totalRows; r++) {
+                for (let c = loopStartIdx; c <= loopEndIdx; c++) {
+                    const cellRef = XLSX.utils.encode_cell({r, c});
+                    if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+                    const cur = ws[cellRef].s || {};
+                    const border = cur.border || {};
+                    if (c === loopStartIdx) border.left = {style: 'medium', color: {rgb: '4F81BD'}};
+                    if (c === loopEndIdx) border.right = {style: 'medium', color: {rgb: '4F81BD'}};
+                    if (r === 0) {
+                        border.top = {style: 'medium', color: {rgb: '4F81BD'}};
+                        cur.fill = cur.fill || {patternType: 'solid', fgColor: {rgb: '1F334D'}};
+                        cur.font = cur.font || {color: {rgb: 'FFFFFF'}, bold: true};
+                    }
+                    if (r === totalRows - 1) border.bottom = {style: 'medium', color: {rgb: '4F81BD'}};
+                    cur.border = border;
+                    ws[cellRef].s = cur;
+                }
+            }
+        }
+
+        if (chainIdx < 0) return ws;
         for (let r = 0; r < d.data.length; r++) {
             const chainVal = d.data[r] && d.data[r][chainIdx];
             const color = getChainColorMeta(chainVal);
@@ -1677,12 +2135,31 @@
         let html = '<table><thead><tr>';
         const chainIdx = sheetData.headers.indexOf('Chain');
         const modeIdx = sheetData.headers.indexOf('MODE');
-        sheetData.headers.forEach((h) => {
-            html += `<th>${h}</th>`;
+        const loopStartIdx = sheetData.headers.indexOf('loopTarget');
+        const loopEndIdx = sheetData.headers.indexOf('LOOP_PIN_DISTANCE');
+        const loopMetaByRow = Array.isArray(sheetData.loopViolationByRow) ? sheetData.loopViolationByRow : [];
+        const headerToIndex = {};
+        sheetData.headers.forEach((h, i) => { headerToIndex[h] = i; });
+
+        sheetData.headers.forEach((h, idx) => {
+            let thStyle = '';
+            if (loopStartIdx >= 0 && loopEndIdx >= loopStartIdx && idx >= loopStartIdx && idx <= loopEndIdx) {
+                const left = idx === loopStartIdx ? 'border-left:2px solid #4f81bd;' : '';
+                const right = idx === loopEndIdx ? 'border-right:2px solid #4f81bd;' : '';
+                thStyle = ` style="background:#1f334d; color:#fff; ${left}${right} border-top:2px solid #4f81bd;"`;
+            }
+            html += `<th${thStyle}>${h}</th>`;
         });
         html += '</tr></thead><tbody>';
         sheetData.data.forEach((row, rowIdx) => {
             const color = chainIdx >= 0 ? getChainColorMeta(row[chainIdx]) : null;
+            const loopMeta = loopMetaByRow[rowIdx] || {violated: false, highlightHeaders: []};
+            const highlightIdxSet = new Set(
+                (loopMeta.highlightHeaders || [])
+                    .map(h => headerToIndex[h])
+                    .filter(i => Number.isInteger(i) && i >= 0)
+            );
+            const violated = !!loopMeta.violated;
             html += '<tr>';
             row.forEach((cell, idx) => {
                 if (idx === modeIdx) {
@@ -1701,6 +2178,17 @@
                         html += `<td style="background:${color.bg}; color:${color.fg}; font-weight:bold;">${cell}</td>`;
                         return;
                     }
+                }
+                if (violated && highlightIdxSet.has(idx)) {
+                    html += `<td style="background:#ff5c5c; color:#fff; font-weight:bold;">${cell}</td>`;
+                    return;
+                }
+                if (loopStartIdx >= 0 && loopEndIdx >= loopStartIdx && idx >= loopStartIdx && idx <= loopEndIdx) {
+                    const left = idx === loopStartIdx ? 'border-left:2px solid #4f81bd;' : '';
+                    const right = idx === loopEndIdx ? 'border-right:2px solid #4f81bd;' : '';
+                    const bottom = rowIdx === sheetData.data.length - 1 ? 'border-bottom:2px solid #4f81bd;' : '';
+                    html += `<td style="${left}${right}${bottom}">${cell}</td>`;
+                    return;
                 }
                 html += `<td>${cell}</td>`;
             });
