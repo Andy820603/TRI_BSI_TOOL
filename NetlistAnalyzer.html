@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Netlist 智慧分析儀 v3.3 (含使用手冊)</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --input-bg: #2d2d2d;
+            --text-color: #e0e0e0;
+            --accent-color: #3498db;
+            --success-color: #2ecc71;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --border-color: #444;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            padding-top: 40px; /* 避免標題被按鈕遮擋 */
+        }
+
+        h1, h2, h3 { color: var(--accent-color); margin-top: 0; }
+        
+        /* === 幫助按鈕樣式 === */
+        .help-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 45px;
+            height: 45px;
+            background-color: var(--accent-color);
+            color: white;
+            border-radius: 50%;
+            border: 2px solid white;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            z-index: 2000;
+            transition: transform 0.2s, background-color 0.2s;
+        }
+        .help-btn:hover {
+            transform: scale(1.1);
+            background-color: #2980b9;
+        }
+
+        /* === 容器與面板 === */
+        .container { max-width: 1200px; margin: 0 auto; }
+        .panel {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #bbb; }
+        
+        input[type="file"] {
+            background: var(--input-bg);
+            color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 60px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        /* 常用目標 Checkbox 區 */
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 8px;
+            background: #252525;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            max-height: 150px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+        .checkbox-item input { margin-right: 5px; cursor: pointer; }
+
+        /* 設定區塊 */
+        .settings-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #252525;
+        }
+        
+        .toggle-header { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+        input[type="checkbox"].toggle { transform: scale(1.2); cursor: pointer; }
+
+        /* 按鈕樣式 */
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.2s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+        .btn-green { background-color: var(--success-color); }
+        .btn-small { padding: 4px 10px; font-size: 12px; margin-top: 0; background-color: #555; margin-right: 5px; }
+        .btn-action-group { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #333; }
+        .group-section { margin-bottom: 18px; }
+        .group-title {
+            font-weight: bold;
+            color: #bbb;
+            margin: 0 0 8px 0;
+            border-left: 3px solid #555;
+            padding-left: 8px;
+        }
+        .manual-group-controls { display: none; align-items: center; gap: 6px; margin-left: 10px; }
+        .manual-group-spec {
+            display: none;
+            margin-top: 10px;
+            background: #252525;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 10px;
+        }
+        .manual-drop-area {
+            border: 1px dashed #666;
+            border-radius: 6px;
+            padding: 8px;
+            min-height: 12px;
+        }
+        .manual-groups-board {
+            display: block;
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding-bottom: 8px;
+        }
+        .manual-group-column {
+            min-width: auto;
+            max-width: none;
+            flex: none;
+        }
+        .manual-groups-board.dragging {
+            border-bottom: 2px solid #9b59b6;
+        }
+        .manual-group-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .manual-group-row .group-title {
+            width: 120px;
+            min-width: 120px;
+            margin: 6px 0 0 0;
+        }
+        .manual-group-row .manual-drop-area {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            min-height: 80px;
+        }
+        .manual-group-row .result-card {
+            width: 320px;
+            flex: 0 0 320px;
+        }
+
+        /* 卡片顯示區 */
+        .cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        .result-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            position: relative;
+            transition: transform 0.2s;
+        }
+        .result-card:hover { transform: translateY(-2px); border-color: var(--accent-color); }
+        .result-card.manual-selected {
+            border-color: #9b59b6;
+            box-shadow: 0 0 0 2px rgba(155,89,182,0.35);
+        }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .card-title { font-weight: bold; color: var(--text-color); }
+        .card-actions { display: flex; gap: 5px; margin-top: 15px; }
+        .card-selector { transform: scale(1.3); margin-right: 8px; cursor: pointer; }
+
+        /* 模態視窗 (Modal) */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); }
+        .modal-content { background-color: var(--card-bg); margin: 3% auto; padding: 25px; border: 1px solid #888; width: 85%; max-height: 85vh; overflow-y: auto; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        .close-modal { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close-modal:hover { color: #fff; }
+
+        /* 表格樣式 */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }
+        th, td { border: 1px solid #555; padding: 8px; text-align: left; }
+        th { background-color: #333; position: sticky; top: 0; }
+        tr:nth-child(even) { background-color: #262626; }
+
+        /* Log */
+        #logArea { font-family: monospace; background: #000; color: #0f0; padding: 10px; height: 100px; overflow-y: auto; border-radius: 4px; margin-top: 20px; font-size: 12px; }
+
+        /* === 使用手冊專用樣式 === */
+        .manual-section { margin-bottom: 30px; border-bottom: 1px solid #444; padding-bottom: 20px; }
+        .manual-section:last-child { border-bottom: none; }
+        .manual-title { color: var(--accent-color); font-size: 1.5em; border-left: 4px solid var(--accent-color); padding-left: 10px; margin-bottom: 15px; }
+        .manual-subtitle { color: #fff; font-size: 1.2em; margin-top: 20px; margin-bottom: 10px; font-weight: bold; }
+        .manual-text { line-height: 1.6; color: #ccc; margin-bottom: 10px; }
+        .manual-list { margin-left: 20px; color: #ccc; line-height: 1.6; }
+        .manual-list li { margin-bottom: 5px; }
+        .tag-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.85em; font-weight: bold; color: white; display: inline-block; }
+        .tag-red { background-color: var(--danger-color); }
+        .tag-blue { background-color: var(--accent-color); }
+        .tag-yellow { background-color: var(--warning-color); color: black; }
+        .manual-table { width: 100%; border: 1px solid #555; border-collapse: collapse; margin: 15px 0; }
+        .manual-table th { background-color: #333; padding: 10px; border: 1px solid #555; color: white; }
+        .manual-table td { padding: 10px; border: 1px solid #555; color: #ddd; vertical-align: top; }
+        .info-box { background: rgba(52, 152, 219, 0.1); border-left: 4px solid var(--accent-color); padding: 10px; margin: 15px 0; color: #ddd; }
+    </style>
+</head>
+<body>
+
+<div class="help-btn" onclick="openHelp()" title="開啟使用手冊">?</div>
+
+<div class="container">
+    <h1>⚡ Netlist 智慧分析儀 v3.3</h1>
+    
+    <div class="panel">
+        <h3>1. 選擇檔案</h3>
+        <input type="file" id="fileInput" accept=".asc,.txt">
+    </div>
+
+    <div class="panel">
+        <h3>2. 設定查詢目標 (Targets)</h3>
+        
+        <label>常用目標 (勾選後會合併下方文字框內容)：</label>
+        <div style="margin-bottom: 5px;">
+            <button class="btn-small" onclick="toggleCheckboxes('preset-target', true)">全選目標</button>
+            <button class="btn-small" onclick="toggleCheckboxes('preset-target', false)">取消全選</button>
+            <button class="btn-small" onclick="removeSelectedTargets()">刪除勾選目標</button>
+        </div>
+        <div class="checkbox-grid" id="presetArea"></div>
+
+        <label for="targetInput">手動輸入目標 (以逗號或換行分隔)：</label>
+        <textarea id="targetInput" placeholder="例如: U1, R203..."></textarea>
+        <div style="margin-top: 8px;">
+            <button class="btn-small" onclick="clearSavedTargets()">🧹 清除已記憶目標</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3 style="cursor: pointer;" onclick="toggleDiv('filterDetails')">
+            3. 過濾規則設定 (點擊展開/收合) ▼
+        </h3>
+        <div id="filterDetails">
+            
+            <div class="settings-group" style="border-color: var(--danger-color);">
+                <div class="toggle-header">
+                    <input type="checkbox" class="toggle" id="enablePinFilter" checked onchange="toggleTextarea('pinIgnoreInput', this.checked)">
+                    <label for="enablePinFilter" style="margin:0; color:var(--danger-color);">⛔ 接點忽略清單 (Result Ignore List)</label>
+                </div>
+                <div style="font-size: 0.8em; color: #bbb; margin-bottom: 5px;">
+                    若連線結果的 Net 符合此清單，則<b>隱藏</b>該筆資料 (支援 * 模糊搜尋)。
+                </div>
+                <textarea id="pinIgnoreInput" placeholder="輸入要忽略的 Net 名稱，例如: GND, NC_*, *TEST*"></textarea>
+            </div>
+
+            <div class="settings-group">
+                <div class="toggle-header">
+                    <input type="checkbox" class="toggle" id="enableGlobalFilter" checked onchange="toggleTextarea('bannedInput', this.checked)">
+                    <label for="enableGlobalFilter" style="margin:0; color:var(--warning-color);">🛡️ 全域忽略清單 (Global Ignore)</label>
+                </div>
+                <div style="font-size: 0.8em; color: #aaa; margin-bottom: 5px;">這些 Net 在運算初期就會被排除。</div>
+                <textarea id="bannedInput"></textarea>
+            </div>
+
+            <div class="settings-group">
+                <div class="toggle-header">
+                    <input type="checkbox" class="toggle" id="enableCapFilter" checked onchange="toggleTextarea('capInput', this.checked)">
+                    <label for="enableCapFilter" style="margin:0; color:var(--accent-color);">🔋 R/C 串聯忽略清單</label>
+                </div>
+                <div style="font-size: 0.8em; color: #aaa; margin-bottom: 5px;">追蹤串聯元件時，若一端為這些 Net 則略過。</div>
+                <textarea id="capInput"></textarea>
+            </div>
+
+            <div class="settings-group">
+                <div class="toggle-header">
+                    <input type="checkbox" class="toggle" id="showOnlyWithChain">
+                    <label for="showOnlyWithChain" style="margin:0; color:#9b59b6;">🔎 只顯示有 Chain 的線路</label>
+                </div>
+                <div style="font-size: 0.8em; color: #aaa;">勾選後，沒有 Chain 的列將不顯示（預覽與匯出都套用）。</div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="panel">
+        <button id="analyzeBtn" onclick="startAnalysis()" disabled>🚀 開始分析</button>
+        <div id="logArea">等待檔案載入...</div>
+    </div>
+
+    <div id="resultsArea" class="panel" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>分析結果</h3>
+            <div>
+                <button id="exportAllBtn" class="btn-green" onclick="exportSelectedCards()" style="margin-top:0;">💾 儲存選取的卡片</button>
+            </div>
+        </div>
+
+        <div class="btn-action-group">
+            <span style="margin-right:10px; font-weight:bold; color:#aaa;">卡片操作：</span>
+            <button class="btn-small" onclick="toggleResultCards(true)">☑️ 全選卡片</button>
+            <button class="btn-small" onclick="toggleResultCards(false)">⬜ 取消全選</button>
+            <button class="btn-small" onclick="resetManualGrouping()">清空分組</button>
+        </div>
+        <div id="manualGroupSpecBox" class="manual-group-spec">
+            <div style="font-size:12px; color:#aaa; margin-bottom:6px;">文字分組（可貼上：group 1 / group 2 ...）</div>
+            <textarea id="manualGroupSpecInput" style="height:95px;" placeholder="group 1&#10;J1_LPU1 J2_LPU1 J1_LPU2&#10;J2_LPU2 J1_LPU3 J2_LPU3&#10;group 2&#10;J0A J0B J0C&#10;J0D"></textarea>
+            <div style="margin-top:6px;">
+                <button class="btn-small" onclick="applyManualGroupSpec()">套用文字分組</button>
+            </div>
+        </div>
+
+        <div class="cards-container" id="cardsContainer"></div>
+        <div style="margin-top:10px; padding-top:8px; border-top:1px solid #333;">
+            <label for="newGroupNameInput" style="display:inline; margin-right:8px; color:#aaa;">新增 Group</label>
+            <input id="newGroupNameInput" type="text" placeholder="例如: group DEBUG"
+                style="background:#2d2d2d; color:#fff; border:1px solid #555; border-radius:4px; padding:6px 8px; min-width:220px;">
+            <button class="btn-small" onclick="addManualGroup()">新增</button>
+        </div>
+    </div>
+</div>
+
+<div id="previewModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closePreview()">&times;</span>
+        <h2 id="modalTitle">預覽</h2>
+        <div id="modalTableContainer"></div>
+    </div>
+</div>
+
+<div id="helpModal" class="modal">
+    <div class="modal-content" style="max-width: 900px;">
+        <span class="close-modal" onclick="closeHelp()">&times;</span>
+        <h1>📖 Netlist 智慧分析儀 v3.3 使用說明書</h1>
+        
+        <div class="manual-section">
+            <div class="manual-title">1. 簡介與功能概述</div>
+            <p class="manual-text">
+                **Netlist 智慧分析儀** 是一款基於網頁的輕量化工具，專為硬體工程師設計。
+                它能快速解析電路網表（Netlist），自動追蹤元件之間的連接關係，特別針對 JTAG (IEEE 1149.x) 測試鏈路與電容/電阻串聯路徑進行分析。
+            </p>
+            <ul class="manual-list">
+                <li><strong>多格式支援</strong>：支援 <code>.asc</code> 與 <code>.txt</code> 格式的 Netlist。</li>
+                <li><strong>智慧追蹤</strong>：自動分析直接連接 (1149.1)、電容耦合 (1149.6) 及電阻串聯連接。</li>
+                <li><strong>GND 檢測</strong>：快速篩選目標元件的接地 Pin 腳。</li>
+                <li><strong>彈性過濾</strong>：支援萬用字元（Wildcard <code>*</code>）的模糊搜尋過濾。</li>
+                <li><strong>批次匯出</strong>：支援將選定的分析結果合併匯出為 Excel 檔案。</li>
+            </ul>
+        </div>
+
+        <div class="manual-section">
+            <div class="manual-title">2. 操作流程詳解</div>
+            
+            <div class="manual-subtitle">步驟 1：選擇檔案</div>
+            <p class="manual-text">點擊「選擇檔案」按鈕載入 <code>.asc</code> 或 <code>.txt</code> 檔案。所有運算皆在本地端完成，確保資料安全。</p>
+            
+            <div class="manual-subtitle">步驟 2：設定查詢目標</div>
+            <ul class="manual-list">
+                <li><strong>常用目標</strong>：利用上方勾選區快速選擇 CPU 或連接器。</li>
+                <li><strong>手動輸入</strong>：在文字框輸入其他零件名稱，使用逗號或換行分隔。</li>
+            </ul>
+
+            <div class="manual-subtitle">步驟 3：過濾規則設定 (重要)</div>
+            <table class="manual-table">
+                <tr>
+                    <th width="30%">設定項目</th>
+                    <th>功能說明與建議</th>
+                </tr>
+                <tr>
+                    <td><span class="tag-badge tag-red">⛔ 接點忽略清單</span></td>
+                    <td>
+                        分析結果若包含此 Net，該筆資料會被<strong>隱藏</strong>。<br>
+                        支援 <code>*</code> 萬用字元。例如輸入 <code>NC_*</code> 可過濾所有 NC 開頭的 Net。
+                    </td>
+                </tr>
+                <tr>
+                    <td><span class="tag-badge tag-yellow">🛡️ 全域忽略清單</span></td>
+                    <td>
+                        在運算初期直接排除這些 Net。<strong>必填</strong>。<br>
+                        務必包含電源 (3V3, 1V8) 與地 (GND)，否則系統會誤判所有元件短路。
+                    </td>
+                </tr>
+                <tr>
+                    <td><span class="tag-badge tag-blue">🔋 R/C 忽略清單</span></td>
+                    <td>
+                        追蹤串聯時，若一端接至此清單的 Net，則停止追蹤。<br>
+                        防止濾波電容被誤判為訊號路徑。
+                    </td>
+                </tr>
+            </table>
+            
+            <div class="info-box">
+                ✨ <strong>小技巧：</strong> 在忽略清單中輸入 <code>*TEST*</code> 可過濾所有包含 "TEST" 字眼的 Net。
+            </div>
+        </div>
+
+        <div class="manual-section">
+            <div class="manual-title">3. 分析結果解讀</div>
+            <p class="manual-text">分析結果以「卡片」形式呈現，不同顏色代表不同類型的連接：</p>
+            <ul class="manual-list">
+                <li><span class="tag-badge tag-red">GND</span>：列出目標元件所有連接到 GND 的 Pin 腳。</li>
+                <li><span class="tag-badge tag-blue">1149.1</span>：表示<strong>直接連接</strong> (DC Coupling)。</li>
+                <li><span class="tag-badge tag-yellow">1149.6 (Cap)</span>：透過電容連接 (AC Coupling)。</li>
+                <li><span class="tag-badge tag-yellow">Res Link</span>：透過電阻連接。</li>
+            </ul>
+        </div>
+
+        <div class="manual-section">
+            <div class="manual-title">4. 常見問題</div>
+            <p class="manual-text"><strong>Q: 為什麼分析出來全是 VDD 的連線？</strong><br>
+            A: 請檢查 🛡️ 全域忽略清單，將電源 Net 加入其中。</p>
+            <p class="manual-text"><strong>Q: 如何忽略沒用的 NC 腳位？</strong><br>
+            A: 在 ⛔ 接點忽略清單中輸入 <code>NC_*</code>。</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ================= 預設資料 =================
+    const PRESET_TARGETS = ['CPU0', 'CPU1'];
+    for(let i=1; i<=9; i++) PRESET_TARGETS.push(`J${i}EXA`);
+    for(let i=1; i<=8; i++) PRESET_TARGETS.push(`J${i}MB`);
+
+    const DEFAULT_BANNED = ['GND', '3V3_EROT_STBY', 'HSC_48V_IOM', '1V8', '3V3', '1V2', '1V1'];
+    const DEFAULT_CAP_IGNORE = ['GND', '3V3_EROT_STBY', 'HSC_48V_IOM', 'VDD_1V8'];
+    const DEFAULT_PIN_IGNORE = []; 
+
+    const STORAGE_KEYS = {
+        targetInput: 'netlistAnalyzer.targetInput',
+        presetSelected: 'netlistAnalyzer.presetSelected',
+        presetBaseTargets: 'netlistAnalyzer.presetBaseTargets',
+        showOnlyWithChain: 'netlistAnalyzer.showOnlyWithChain',
+        groupMode: 'netlistAnalyzer.groupMode',
+        manualGroupCount: 'netlistAnalyzer.manualGroupCount',
+        manualGroupMap: 'netlistAnalyzer.manualGroupMap',
+        manualGroupSpec: 'netlistAnalyzer.manualGroupSpec',
+        bannedInput: 'netlistAnalyzer.bannedInput',
+        capInput: 'netlistAnalyzer.capInput',
+        pinIgnoreInput: 'netlistAnalyzer.pinIgnoreInput',
+        enableGlobalFilter: 'netlistAnalyzer.enableGlobalFilter',
+        enableCapFilter: 'netlistAnalyzer.enableCapFilter',
+        enablePinFilter: 'netlistAnalyzer.enablePinFilter'
+    };
+
+    let globalAnalysisResults = {}; 
+    let rawFileContent = "";
+    let rawFileName = "";
+    let baseTargets = [...PRESET_TARGETS];
+    let manualGroupCount = 4;
+    let manualGroupMap = {};
+    let manualGroupSpec = "";
+    let manualSelectedKeys = new Set();
+    let manualAnchorKey = null;
+    let manualVisibleOrder = [];
+    let manualDragging = false;
+
+    function saveSetting(key, value) {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+    }
+
+    function loadSetting(key, defaultValue) {
+        try {
+            const raw = localStorage.getItem(key);
+            return raw === null ? defaultValue : JSON.parse(raw);
+        } catch (e) {
+            return defaultValue;
+        }
+    }
+
+    function savePresetSelection() {
+        const selected = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
+        saveSetting(STORAGE_KEYS.presetSelected, selected);
+    }
+
+    function parseTargetText(raw) {
+        return String(raw || "")
+            .split(/[\n,]+/)
+            .map(s => s.trim())
+            .filter(s => s !== "");
+    }
+
+    function getMergedTargets(rawTargetText) {
+        const merged = [...baseTargets];
+        const exists = new Set(baseTargets);
+        parseTargetText(rawTargetText).forEach(t => {
+            if (!exists.has(t)) {
+                exists.add(t);
+                merged.push(t);
+            }
+        });
+        return merged;
+    }
+
+    function renderTargetCheckboxes(targetList, selectedList) {
+        const grid = document.getElementById('presetArea');
+        grid.innerHTML = "";
+        targetList.forEach(target => {
+            const div = document.createElement('div');
+            div.className = 'checkbox-item';
+            const checked = Array.isArray(selectedList) ? selectedList.includes(target) : true;
+            div.innerHTML = `<label><input type="checkbox" class="preset-target" value="${target}" ${checked ? 'checked' : ''}> ${target}</label>`;
+            grid.appendChild(div);
+        });
+        document.querySelectorAll('.preset-target').forEach(cb => cb.addEventListener('change', savePresetSelection));
+    }
+
+    function clearSavedTargets() {
+        document.getElementById('targetInput').value = "";
+        saveSetting(STORAGE_KEYS.targetInput, "");
+        const selectedNow = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
+        renderTargetCheckboxes(baseTargets, selectedNow.length > 0 ? selectedNow : baseTargets);
+        savePresetSelection();
+        log("已清除手動目標記憶。");
+    }
+
+    function removeSelectedTargets() {
+        const selected = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
+        if (selected.length === 0) {
+            alert("請先勾選要刪除的目標！");
+            return;
+        }
+        baseTargets = baseTargets.filter(t => !selected.includes(t));
+        saveSetting(STORAGE_KEYS.presetBaseTargets, baseTargets);
+
+        const merged = getMergedTargets(document.getElementById('targetInput').value);
+        renderTargetCheckboxes(merged, merged);
+        savePresetSelection();
+        log(`已刪除 ${selected.length} 個目標。`);
+    }
+
+    function updateGroupModeUI() {
+        const specBox = document.getElementById('manualGroupSpecBox');
+        if (!specBox) return;
+        specBox.style.display = 'block';
+    }
+
+    function normalizeGroupName(name) {
+        let n = String(name || '').trim();
+        if (!n) return '';
+        if (!/^group\b/i.test(n)) n = `group ${n}`;
+        return n;
+    }
+
+    function getGroupNamesFromSpec(raw) {
+        return parseManualGroupSpec(raw).groups;
+    }
+
+    function addManualGroup() {
+        const input = document.getElementById('newGroupNameInput');
+        if (!input) return;
+        const groupName = normalizeGroupName(input.value);
+        if (!groupName) return;
+
+        const current = String(manualGroupSpec || '').trim();
+        const existing = new Set(getGroupNamesFromSpec(current).map(g => g.toLowerCase()));
+        if (!existing.has(groupName.toLowerCase())) {
+            manualGroupSpec = current ? `${current}\n\n${groupName}` : groupName;
+            saveSetting(STORAGE_KEYS.manualGroupSpec, manualGroupSpec);
+            const specInput = document.getElementById('manualGroupSpecInput');
+            if (specInput) specInput.value = manualGroupSpec;
+            renderCards();
+        }
+        input.value = '';
+    }
+
+    function parseManualGroupSpec(raw) {
+        const groups = [];
+        const assignmentByTarget = {};
+        const orderedTargetsByGroup = {};
+        let currentGroup = "";
+        const lines = String(raw || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+
+        lines.forEach(line => {
+            if (/^group\b/i.test(line)) {
+                currentGroup = line;
+                if (!groups.includes(currentGroup)) groups.push(currentGroup);
+                if (!orderedTargetsByGroup[currentGroup]) orderedTargetsByGroup[currentGroup] = [];
+                return;
+            }
+            const tokens = line.split(/[\s,]+/).map(x => x.trim()).filter(Boolean);
+            if (tokens.length === 0) return;
+            if (!currentGroup) {
+                currentGroup = "group 1";
+                if (!groups.includes(currentGroup)) groups.push(currentGroup);
+                if (!orderedTargetsByGroup[currentGroup]) orderedTargetsByGroup[currentGroup] = [];
+            }
+            tokens.forEach(t => {
+                assignmentByTarget[t] = currentGroup;
+                if (!orderedTargetsByGroup[currentGroup].includes(t)) {
+                    orderedTargetsByGroup[currentGroup].push(t);
+                }
+            });
+        });
+
+        return {groups, assignmentByTarget, orderedTargetsByGroup};
+    }
+
+    function buildDefaultGroupSpecB(targets) {
+        const list = Array.from(new Set((targets || []).map(t => String(t).trim()).filter(Boolean)));
+        const pick = (re) => list.filter(t => re.test(t)).sort((a, b) =>
+            a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+        );
+
+        const groups = [
+            {name: 'group LPU_LINK', items: pick(/^J[12]_LPU\d+$/i)},
+            {name: 'group J0J1_ABCD', items: pick(/^J[01][ABCD]$/i)},
+            {name: 'group J7XX', items: pick(/^J7\d{2}$/i)},
+            {name: 'group J5XX', items: pick(/^J5\d{2}$/i)},
+            {name: 'group J6XX', items: pick(/^J6\d{2}$/i)},
+            {name: 'group JBB', items: pick(/^JBB\d+$/i)},
+            {name: 'group U_CHIP', items: pick(/^U\d+$/i)}
+        ];
+
+        const used = new Set(groups.flatMap(g => g.items));
+        const others = list.filter(t => !used.has(t)).sort((a, b) =>
+            a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+        );
+        if (others.length > 0) groups.push({name: 'group OTHERS', items: others});
+
+        return groups
+            .filter(g => g.items.length > 0)
+            .map(g => `${g.name}\n${g.items.join(' ')}`)
+            .join('\n\n');
+    }
+
+    function applyManualGroupSpec() {
+        const input = document.getElementById('manualGroupSpecInput');
+        if (!input) return;
+        manualGroupSpec = input.value || "";
+        saveSetting(STORAGE_KEYS.manualGroupSpec, manualGroupSpec);
+
+        const parsed = parseManualGroupSpec(manualGroupSpec);
+        Object.keys(manualGroupMap).forEach(k => delete manualGroupMap[k]);
+        Object.keys(globalAnalysisResults).forEach(key => {
+            const target = key.startsWith('LINK_') ? key.substring(5) : key;
+            const g = parsed.assignmentByTarget[target];
+            if (g) manualGroupMap[key] = g;
+        });
+        saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
+        renderCards();
+    }
+
+    function applyManualGroupCount() {
+        const input = document.getElementById('manualGroupCount');
+        if (!input) return;
+        const n = Math.max(1, Math.min(30, Number(input.value) || 1));
+        manualGroupCount = n;
+        input.value = String(n);
+        Object.keys(manualGroupMap).forEach(k => {
+            const g = Number(manualGroupMap[k]);
+            if (!g || g < 1 || g > manualGroupCount) delete manualGroupMap[k];
+        });
+        saveSetting(STORAGE_KEYS.manualGroupCount, manualGroupCount);
+        saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
+        renderCards();
+    }
+
+    function resetManualGrouping() {
+        manualGroupMap = {};
+        manualSelectedKeys = new Set();
+        manualAnchorKey = null;
+        saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
+        renderCards();
+    }
+
+    function onManualCardClick(ev, key) {
+        if (!ev) return;
+        if (ev.target && ev.target.closest && ev.target.closest('input,button,label')) return;
+
+        if (ev.shiftKey && manualAnchorKey && manualVisibleOrder.length > 0) {
+            const a = manualVisibleOrder.indexOf(manualAnchorKey);
+            const b = manualVisibleOrder.indexOf(key);
+            if (a >= 0 && b >= 0) {
+                const start = Math.min(a, b);
+                const end = Math.max(a, b);
+                manualSelectedKeys = new Set(manualVisibleOrder.slice(start, end + 1));
+            } else {
+                manualSelectedKeys = new Set([key]);
+            }
+        } else if (ev.ctrlKey || ev.metaKey) {
+            if (manualSelectedKeys.has(key)) manualSelectedKeys.delete(key);
+            else manualSelectedKeys.add(key);
+            manualAnchorKey = key;
+        } else {
+            manualSelectedKeys = new Set([key]);
+            manualAnchorKey = key;
+        }
+        renderCards();
+    }
+
+    function onCardDragStart(ev, key) {
+        if (!ev || !ev.dataTransfer) return;
+        let keys = [];
+        if (manualSelectedKeys.has(key) && manualSelectedKeys.size > 0) {
+            keys = Array.from(manualSelectedKeys);
+        } else {
+            keys = [key];
+            manualSelectedKeys = new Set([key]);
+            manualAnchorKey = key;
+        }
+        ev.dataTransfer.setData('text/plain', JSON.stringify(keys));
+        manualDragging = true;
+        const board = document.getElementById('manualGroupsBoard');
+        if (board) board.classList.add('dragging');
+    }
+
+    function onCardDragEnd() {
+        manualDragging = false;
+        const board = document.getElementById('manualGroupsBoard');
+        if (board) board.classList.remove('dragging');
+    }
+
+    function onGroupDragOver(ev) {
+        ev.preventDefault();
+    }
+
+    function onGroupDrop(ev, groupId) {
+        ev.preventDefault();
+        const raw = ev.dataTransfer ? ev.dataTransfer.getData('text/plain') : '';
+        if (!raw) return;
+        let keys = [];
+        try {
+            const parsed = JSON.parse(raw);
+            keys = Array.isArray(parsed) ? parsed : [String(parsed)];
+        } catch {
+            keys = [raw];
+        }
+        keys = keys.filter(k => globalAnalysisResults[k]);
+        if (keys.length === 0) return;
+
+        const gid = (groupId === '__UNGROUPED__') ? '__UNGROUPED__' : String(groupId || '');
+        keys.forEach(key => {
+            if (!gid || gid === '__UNGROUPED__') delete manualGroupMap[key];
+            else manualGroupMap[key] = gid;
+        });
+        saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
+        manualSelectedKeys = new Set(keys);
+        if (keys.length > 0) manualAnchorKey = keys[0];
+        manualDragging = false;
+        renderCards();
+    }
+
+    // ================= 初始化 =================
+    window.onload = function() {
+        const savedTargetInput = loadSetting(STORAGE_KEYS.targetInput, "");
+        baseTargets = loadSetting(STORAGE_KEYS.presetBaseTargets, [...PRESET_TARGETS]);
+        if (!Array.isArray(baseTargets)) baseTargets = [...PRESET_TARGETS];
+        manualGroupCount = loadSetting(STORAGE_KEYS.manualGroupCount, 4);
+        if (!Number.isFinite(manualGroupCount)) manualGroupCount = 4;
+        manualGroupCount = Math.max(1, Math.min(30, Number(manualGroupCount)));
+        manualGroupMap = loadSetting(STORAGE_KEYS.manualGroupMap, {});
+        if (!manualGroupMap || typeof manualGroupMap !== 'object') manualGroupMap = {};
+        manualGroupSpec = loadSetting(STORAGE_KEYS.manualGroupSpec, "");
+        const savedPresetSelected = loadSetting(STORAGE_KEYS.presetSelected, null);
+        const mergedTargets = getMergedTargets(savedTargetInput);
+        renderTargetCheckboxes(mergedTargets, savedPresetSelected);
+
+        document.getElementById('targetInput').value = savedTargetInput;
+        document.getElementById('bannedInput').value = loadSetting(STORAGE_KEYS.bannedInput, DEFAULT_BANNED.join(', '));
+        document.getElementById('capInput').value = loadSetting(STORAGE_KEYS.capInput, DEFAULT_CAP_IGNORE.join(', '));
+        document.getElementById('pinIgnoreInput').value = loadSetting(STORAGE_KEYS.pinIgnoreInput, DEFAULT_PIN_IGNORE.join(', '));
+
+        document.getElementById('enableGlobalFilter').checked = loadSetting(STORAGE_KEYS.enableGlobalFilter, true);
+        document.getElementById('enableCapFilter').checked = loadSetting(STORAGE_KEYS.enableCapFilter, true);
+        document.getElementById('enablePinFilter').checked = loadSetting(STORAGE_KEYS.enablePinFilter, true);
+        document.getElementById('showOnlyWithChain').checked = loadSetting(STORAGE_KEYS.showOnlyWithChain, false);
+        document.getElementById('manualGroupSpecInput').value = manualGroupSpec;
+        updateGroupModeUI();
+
+        toggleTextarea('bannedInput', document.getElementById('enableGlobalFilter').checked);
+        toggleTextarea('capInput', document.getElementById('enableCapFilter').checked);
+        toggleTextarea('pinIgnoreInput', document.getElementById('enablePinFilter').checked);
+
+        document.getElementById('targetInput').addEventListener('input', (e) => {
+            const raw = e.target.value;
+            saveSetting(STORAGE_KEYS.targetInput, raw);
+
+            // Keep manual targets visible as checkboxes and auto-check newly added ones.
+            const currentSelected = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
+            const merged = getMergedTargets(raw);
+            const selectedSet = new Set(currentSelected);
+            parseTargetText(raw).forEach(t => selectedSet.add(t));
+            renderTargetCheckboxes(merged, Array.from(selectedSet));
+            savePresetSelection();
+        });
+        document.getElementById('bannedInput').addEventListener('input', (e) => {
+            saveSetting(STORAGE_KEYS.bannedInput, e.target.value);
+        });
+        document.getElementById('capInput').addEventListener('input', (e) => {
+            saveSetting(STORAGE_KEYS.capInput, e.target.value);
+        });
+        document.getElementById('pinIgnoreInput').addEventListener('input', (e) => {
+            saveSetting(STORAGE_KEYS.pinIgnoreInput, e.target.value);
+        });
+
+        document.getElementById('enableGlobalFilter').addEventListener('change', (e) => {
+            saveSetting(STORAGE_KEYS.enableGlobalFilter, e.target.checked);
+        });
+        document.getElementById('enableCapFilter').addEventListener('change', (e) => {
+            saveSetting(STORAGE_KEYS.enableCapFilter, e.target.checked);
+        });
+        document.getElementById('enablePinFilter').addEventListener('change', (e) => {
+            saveSetting(STORAGE_KEYS.enablePinFilter, e.target.checked);
+        });
+        document.getElementById('showOnlyWithChain').addEventListener('change', (e) => {
+            saveSetting(STORAGE_KEYS.showOnlyWithChain, e.target.checked);
+        });
+
+        // During manual drag, use wheel to scroll group board horizontally.
+        document.addEventListener('wheel', (ev) => {
+            if (!manualDragging) return;
+            const board = document.getElementById('manualGroupsBoard');
+            if (!board) return;
+            const delta = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+            if (delta !== 0) {
+                board.scrollLeft += delta;
+                ev.preventDefault();
+            }
+        }, { passive: false });
+
+    };
+
+    // ================= 介面操作函數 =================
+    function toggleDiv(id) {
+        const el = document.getElementById(id);
+        el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+    }
+
+    function toggleTextarea(id, enabled) {
+        const el = document.getElementById(id);
+        el.disabled = !enabled;
+        el.style.opacity = enabled ? "1" : "0.5";
+    }
+
+    function toggleCheckboxes(className, checked) {
+        document.querySelectorAll('.' + className).forEach(cb => cb.checked = checked);
+        if (className === 'preset-target') savePresetSelection();
+    }
+
+    function toggleResultCards(checked) {
+        document.querySelectorAll('.card-selector').forEach(cb => cb.checked = checked);
+    }
+
+    function log(msg) {
+        const logDiv = document.getElementById('logArea');
+        logDiv.innerHTML += `> ${msg}<br>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // Modal Control
+    function openHelp() { document.getElementById('helpModal').style.display = 'block'; }
+    function closeHelp() { document.getElementById('helpModal').style.display = 'none'; }
+    function closePreview() { document.getElementById('previewModal').style.display = 'none'; }
+    
+    window.onclick = function(ev) { 
+        if (ev.target == document.getElementById('helpModal')) closeHelp();
+        if (ev.target == document.getElementById('previewModal')) closePreview();
+    }
+
+    // ================= 檔案與分析邏輯 =================
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        rawFileName = file.name.replace(/\.[^.]+$/, '');
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            rawFileContent = e.target.result;
+            document.getElementById('analyzeBtn').disabled = false;
+            log(`檔案已載入 (${(file.size/1024).toFixed(1)} KB)`);
+        };
+        reader.readAsText(file);
+    });
+
+    function parseInputList(elementId) {
+        const raw = document.getElementById(elementId).value;
+        return raw.split(/[\n,]+/).map(s => s.trim()).filter(s => s !== "");
+    }
+
+    function isWildcardMatch(text, patternList) {
+        if (!text) return false;
+        text = text.toUpperCase();
+        for (let pattern of patternList) {
+            pattern = pattern.toUpperCase();
+            if (pattern.includes('*')) {
+                let regexStr = '^' + pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$';
+                let regex = new RegExp(regexStr);
+                if (regex.test(text)) return true;
+            } else {
+                if (text === pattern) return true;
+            }
+        }
+        return false;
+    }
+
+    function getPinName(parts) {
+        return (parts && parts.length > 1) ? parts[1] : "";
+    }
+
+    function getNetName(parts) {
+        // ASC format: column 6 is net name.
+        return (parts && parts.length > 5) ? parts[5] : "";
+    }
+
+    function extractVoltageLevelFromNets(...nets) {
+        for (const net of nets) {
+            if (!net) continue;
+            const m = String(net).toUpperCase().match(/(\d+(?:\.\d+)?V\d*)/);
+            if (m) return m[1];
+        }
+        return "";
+    }
+
+    function startAnalysis() {
+        if (!rawFileContent) return;
+        const showOnlyWithChain = document.getElementById('showOnlyWithChain').checked;
+
+        const checkedTargets = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
+        const manualTargets = parseInputList('targetInput');
+        const selectedTargets = [...new Set([...checkedTargets, ...manualTargets])];
+
+        if (selectedTargets.length === 0) {
+            alert("請至少選擇或輸入一個查詢目標！");
+            return;
+        }
+
+        let globalBanList = document.getElementById('enableGlobalFilter').checked ? parseInputList('bannedInput') : [];
+        let capIgnoreList = document.getElementById('enableCapFilter').checked ? parseInputList('capInput') : [];
+        let pinIgnoreList = document.getElementById('enablePinFilter').checked ? parseInputList('pinIgnoreInput') : [];
+
+        const isGloballyBanned = (net) => isWildcardMatch(net, globalBanList);
+        const isPinIgnored = (net) => isWildcardMatch(net, pinIgnoreList);
+
+        log(`開始分析... 目標數: ${selectedTargets.length}`);
+
+        const lines = rawFileContent.split(/\r?\n/);
+        let dPinsByPart = {}, dPartsByNet = {}, dNetByPartPin = {};
+        let dCapByNet = {}, dNetsByCap = {};
+        let dResByNet = {}, dNetsByRes = {};
+        let dResAllByNet = {}, dNetsByResAll = {};
+        let curPart = null;
+
+        lines.forEach(line => {
+            line = line.trim();
+            if (!line) return;
+            let matchPart = line.match(/^Part\s+(\w+)\s+\(\w+\)/);
+            if (matchPart) {
+                curPart = matchPart[1];
+                if (!dPinsByPart[curPart]) dPinsByPart[curPart] = {};
+                return;
+            }
+            if (curPart && /^\d/.test(line)) {
+                let parts = line.split(/\s+/);
+                if (parts.length >= 6) {
+                    let pinNum = parts[0];
+                    let net = getNetName(parts);
+                    
+                    dPinsByPart[curPart][pinNum] = parts;
+                    if (!dPartsByNet[net]) dPartsByNet[net] = [];
+                    dPartsByNet[net].push(curPart);
+                    if (!dNetByPartPin[net]) dNetByPartPin[net] = [];
+                    dNetByPartPin[net].push({part: curPart, pin: pinNum});
+
+                    let isCap = /^(C\d+|KCC\d+)/.test(curPart);
+                    let isRes = /^R\d+/.test(curPart);
+                    let isIgnoredForRC = isWildcardMatch(net, capIgnoreList);
+
+                    if (isCap && !isIgnoredForRC) {
+                        if (!dCapByNet[net]) dCapByNet[net] = [];
+                        dCapByNet[net].push(curPart);
+                        if (!dNetsByCap[curPart]) dNetsByCap[curPart] = [];
+                        dNetsByCap[curPart].push(net);
+                    }
+                    if (isRes && !isIgnoredForRC) {
+                        if (!dResByNet[net]) dResByNet[net] = [];
+                        dResByNet[net].push(curPart);
+                        if (!dNetsByRes[curPart]) dNetsByRes[curPart] = [];
+                        dNetsByRes[curPart].push(net);
+                    }
+                    if (isRes) {
+                        if (!dResAllByNet[net]) dResAllByNet[net] = [];
+                        dResAllByNet[net].push(curPart);
+                        if (!dNetsByResAll[curPart]) dNetsByResAll[curPart] = [];
+                        dNetsByResAll[curPart].push(net);
+                    }
+                }
+            }
+        });
+
+        for (let net in dPartsByNet) {
+            if (dPartsByNet[net].length > 10) globalBanList.push(net);
+        }
+
+        globalAnalysisResults = {};
+
+        const unifiedHeaders = [
+            'TestCardTarget',
+            'TestCardTarget_Pin',
+            'TestCardTarget_PinName',
+            'TestCardTarget_NetNAME',
+            'VOLTAGE LEVEL',
+            'PULL_HIGH',
+            'PULL_HIGH_VOLTAGE',
+            'Chain',
+            'LinkTarget',
+            'LinkTarget_Pin',
+            'LinkTarget_PinName',
+            'LinkTarget_NetNAME'
+        ];
+
+        function detectPullHighInfo(testNet) {
+            if (!testNet) return {flag: '', voltage: ''};
+            const resList = dResAllByNet[testNet] || [];
+            const voltages = new Set();
+
+            resList.forEach(res => {
+                const nets = dNetsByResAll[res] || [];
+                if (nets.length !== 2) return;
+                const otherNet = (nets[0] === testNet) ? nets[1] : nets[0];
+                const v = extractVoltageLevelFromNets(otherNet);
+                if (v) voltages.add(v);
+            });
+
+            if (voltages.size === 0) return {flag: '', voltage: ''};
+            return {flag: 'Y', voltage: Array.from(voltages).join('/')};
+        }
+
+        const linkMap = {};
+        const addLink = (target, pin, linkInfo) => {
+            const k = `${target}__${pin}`;
+            if (!linkMap[k]) linkMap[k] = [];
+            linkMap[k].push(linkInfo);
+        };
+
+        // 1) 1149.1 direct links.
+        selectedTargets.forEach(target => {
+            if (!dPinsByPart[target]) return;
+            for (let pin in dPinsByPart[target]) {
+                const pinParts = dPinsByPart[target][pin];
+                const net = getNetName(pinParts);
+                if (!net || isGloballyBanned(net) || isPinIgnored(net)) continue;
+
+                const others = (dNetByPartPin[net] || []).filter(x => x.part !== target && selectedTargets.includes(x.part));
+                others.forEach(other => {
+                    addLink(target, pin, {
+                        chain: '1149.1',
+                        linkTarget: other.part,
+                        linkPin: other.pin,
+                        testNet: net,
+                        linkNet: net
+                    });
+                });
+            }
+        });
+
+        // 2) series links via capacitor/resistor.
+        function processSeries(compDict, chainLabelFn) {
+            for (let comp in compDict) {
+                const nets = compDict[comp];
+                if (nets.length !== 2) continue;
+                const [netA, netB] = nets;
+                if (isGloballyBanned(netA) || isGloballyBanned(netB)) continue;
+                if (isPinIgnored(netA) || isPinIgnored(netB)) continue;
+
+                const targetsOnA = (dNetByPartPin[netA] || []).filter(x => selectedTargets.includes(x.part));
+                const targetsOnB = (dNetByPartPin[netB] || []).filter(x => selectedTargets.includes(x.part));
+                if (targetsOnA.length === 0 || targetsOnB.length === 0) continue;
+
+                targetsOnA.forEach(ta => {
+                    targetsOnB.forEach(tb => {
+                        if (ta.part === tb.part) return;
+                        addLink(ta.part, ta.pin, {
+                            chain: chainLabelFn(comp),
+                            linkTarget: tb.part,
+                            linkPin: tb.pin,
+                            testNet: netA,
+                            linkNet: netB
+                        });
+                    });
+                });
+                targetsOnB.forEach(tb => {
+                    targetsOnA.forEach(ta => {
+                        if (tb.part === ta.part) return;
+                        addLink(tb.part, tb.pin, {
+                            chain: chainLabelFn(comp),
+                            linkTarget: ta.part,
+                            linkPin: ta.pin,
+                            testNet: netB,
+                            linkNet: netA
+                        });
+                    });
+                });
+            }
+        }
+
+        processSeries(dNetsByCap, () => '1149.6');
+        processSeries(dNetsByRes, (comp) => comp);
+
+        // 3) one consolidated table per target.
+        selectedTargets.forEach(target => {
+            if (!dPinsByPart[target]) return;
+            const rows = [];
+            const sortedPins = Object.keys(dPinsByPart[target]).sort((a, b) =>
+                a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+            );
+
+            sortedPins.forEach(pin => {
+                const pinParts = dPinsByPart[target][pin];
+                const testPinName = getPinName(pinParts);
+                const testNet = getNetName(pinParts);
+                const pullHigh = detectPullHighInfo(testNet);
+                const links = linkMap[`${target}__${pin}`] || [];
+
+                if (links.length === 0) {
+                    if (showOnlyWithChain) return;
+                    rows.push([target, pin, testPinName, testNet, '', pullHigh.flag, pullHigh.voltage, '', '', '', '', '']);
+                    return;
+                }
+
+                links.forEach(link => {
+                    const linkPinParts = dPinsByPart[link.linkTarget] && dPinsByPart[link.linkTarget][link.linkPin]
+                        ? dPinsByPart[link.linkTarget][link.linkPin]
+                        : null;
+                    const linkPinName = linkPinParts ? getPinName(linkPinParts) : '';
+                    const linkNetName = link.linkNet || (linkPinParts ? getNetName(linkPinParts) : '');
+                    const voltage = extractVoltageLevelFromNets(link.testNet, linkNetName);
+
+                    rows.push([
+                        target,
+                        pin,
+                        testPinName,
+                        testNet,
+                        voltage,
+                        pullHigh.flag,
+                        pullHigh.voltage,
+                        link.chain,
+                        link.linkTarget,
+                        link.linkPin,
+                        linkPinName,
+                        linkNetName
+                    ]);
+                });
+            });
+
+            const chainSet = new Set(rows.map(r => r[7]).filter(v => v && String(v).trim() !== ''));
+            const normalizedChainSet = new Set(
+                Array.from(chainSet).map(v => (/^R\d+$/i.test(v) ? 'RES' : v))
+            );
+            const sortedChains = Array.from(normalizedChainSet).sort((a, b) => {
+                const order = (v) => {
+                    if (v === '1149.1') return 1;
+                    if (v === '1149.6') return 2;
+                    if (v === 'RES') return 3;
+                    return 4;
+                };
+                const oa = order(a), ob = order(b);
+                if (oa !== ob) return oa - ob;
+                return String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'});
+            });
+            const typeTags = sortedChains.length > 0 ? sortedChains : ['No Link'];
+
+            globalAnalysisResults[`LINK_${target}`] = {
+                headers: unifiedHeaders,
+                data: rows,
+                type: typeTags[0],
+                typeTags: typeTags
+            };
+        });
+
+        // Use default Group-B only when user has no custom text-group spec.
+        if (!manualGroupSpec || !manualGroupSpec.trim()) {
+            manualGroupSpec = buildDefaultGroupSpecB(selectedTargets);
+            saveSetting(STORAGE_KEYS.manualGroupSpec, manualGroupSpec);
+            const specInput = document.getElementById('manualGroupSpecInput');
+            if (specInput) specInput.value = manualGroupSpec;
+        }
+
+        // Apply grouping based on current saved text spec (custom or default).
+        const parsed = parseManualGroupSpec(manualGroupSpec);
+        const allGroupNames = new Set(parsed.groups.map(g => g.toLowerCase()));
+        Object.keys(globalAnalysisResults).forEach(key => {
+            const current = manualGroupMap[key] ? String(manualGroupMap[key]) : '';
+            if (current && allGroupNames.has(current.toLowerCase())) return;
+            const target = key.startsWith('LINK_') ? key.substring(5) : key;
+            const g = parsed.assignmentByTarget[target];
+            if (g) manualGroupMap[key] = g;
+            else delete manualGroupMap[key];
+        });
+        saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
+
+        renderCards();
+        log("分析完成。");
+    }
+
+    function renderCards() {
+        const container = document.getElementById('cardsContainer');
+        container.innerHTML = "";
+        document.getElementById('resultsArea').style.display = 'block';
+        manualVisibleOrder = [];
+
+        const sortedKeys = Object.keys(globalAnalysisResults).sort();
+        if (sortedKeys.length === 0) {
+            container.innerHTML = "<p style='color:#aaa'>沒有資料。</p>";
+            return;
+        }
+        container.style.display = 'block';
+        container.style.gridTemplateColumns = '';
+        container.style.gap = '0';
+
+        const makeCard = (key, draggableMode) => {
+            const sheetData = globalAnalysisResults[key];
+            const card = document.createElement('div');
+            card.className = 'result-card';
+            if (draggableMode) {
+                card.draggable = true;
+                card.style.cursor = 'grab';
+                if (manualSelectedKeys.has(key)) card.classList.add('manual-selected');
+                card.title = '按 Shift 可多選，拖曳可整批移動';
+                card.addEventListener('click', (ev) => onManualCardClick(ev, key));
+                card.addEventListener('dragstart', (ev) => onCardDragStart(ev, key));
+                card.addEventListener('dragend', onCardDragEnd);
+            }
+            
+            const tags = Array.isArray(sheetData.typeTags) && sheetData.typeTags.length > 0
+                ? sheetData.typeTags
+                : [sheetData.type || 'Unknown'];
+
+            const renderTag = (tag) => {
+                let style = 'background:#555; color:#fff;';
+                if (tag === '1149.1') style = 'background:#5f7d95; color:#fff;';
+                else if (tag === '1149.6') style = 'background:#8a7a4a; color:#fff;';
+                else if (tag === 'RES') style = 'background:#5f7f6a; color:#fff;';
+                else if (tag === 'No Link') style = 'background:#7f8c8d; color:#fff;';
+                else if (String(tag).includes('GND')) style = 'background:#e74c3c; color:#fff;';
+                return `<span style="${style} padding:2px 6px; border-radius:4px; font-size:12px;">${tag}</span>`;
+            };
+            const badgesHtml = tags.map(renderTag).join(' ');
+
+            card.innerHTML = `
+                <div class="card-header">
+                    <div style="display:flex; align-items:center;">
+                        <input type="checkbox" class="card-selector" value="${key}" checked>
+                        <span class="card-title">${key}</span>
+                    </div>
+                    <div style="display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end;">${badgesHtml}</div>
+                </div>
+                <div style="font-size:0.9em; color:#aaa; margin-bottom:10px;">
+                    資料筆數: ${sheetData.data.length}
+                </div>
+                <div class="card-actions">
+                    <button class="btn-small" onclick="previewSheet('${key}')">👁️ 檢視</button>
+                    <button class="btn-small btn-green" onclick="exportSingleSheet('${key}')">💾 下載</button>
+                </div>
+            `;
+            return card;
+        };
+
+        const parsedSpec = parseManualGroupSpec(manualGroupSpec);
+        const groupNames = parsedSpec.groups;
+        const manualGroups = {'未分組': []};
+        groupNames.forEach(name => { manualGroups[name] = []; });
+        const targetToKey = {};
+        sortedKeys.forEach(key => {
+            const target = key.startsWith('LINK_') ? key.substring(5) : key;
+            targetToKey[target] = key;
+        });
+
+        sortedKeys.forEach(key => {
+            const g = manualGroupMap[key] ? String(manualGroupMap[key]) : '';
+            if (g && manualGroups[g]) manualGroups[g].push(key);
+            else manualGroups['未分組'].push(key);
+        });
+
+        // Respect manual spec order in each group; append unspecified keys after.
+        Object.keys(manualGroups).forEach(groupName => {
+            if (groupName === '未分組') return;
+            const desiredTargets = (parsedSpec.orderedTargetsByGroup && parsedSpec.orderedTargetsByGroup[groupName]) || [];
+            const currentKeys = manualGroups[groupName];
+            if (currentKeys.length <= 1) return;
+
+            const desiredKeys = desiredTargets
+                .map(t => targetToKey[t])
+                .filter(k => k && currentKeys.includes(k));
+            const used = new Set(desiredKeys);
+            const rest = currentKeys.filter(k => !used.has(k)).sort((a, b) =>
+                a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+            );
+            manualGroups[groupName] = [...desiredKeys, ...rest];
+        });
+
+        const board = document.createElement('div');
+        board.id = 'manualGroupsBoard';
+        board.className = 'manual-groups-board';
+
+        Object.keys(manualGroups).forEach(groupName => {
+            const section = document.createElement('div');
+            section.className = 'group-section manual-group-column manual-group-row';
+            const title = document.createElement('div');
+            title.className = 'group-title';
+            title.textContent = `${groupName} (${manualGroups[groupName].length})`;
+            section.appendChild(title);
+
+            const grid = document.createElement('div');
+            grid.className = 'cards-container manual-drop-area';
+            const groupId = groupName === '未分組' ? '__UNGROUPED__' : groupName;
+            grid.addEventListener('dragover', onGroupDragOver);
+            grid.addEventListener('drop', (ev) => onGroupDrop(ev, groupId));
+            manualGroups[groupName].forEach(key => {
+                manualVisibleOrder.push(key);
+                grid.appendChild(makeCard(key, true));
+            });
+            section.appendChild(grid);
+            board.appendChild(section);
+        });
+        container.appendChild(board);
+    }
+
+    function getChainColorMeta(chainValue) {
+        const v = String(chainValue || '').toUpperCase();
+        if (v === '1149.1') {
+            return {bg: '#5f7d95', fg: '#ffffff', xlsxBg: '5F7D95', xlsxFg: 'FFFFFF'};
+        }
+        if (v === '1149.6') {
+            return {bg: '#8a7a4a', fg: '#ffffff', xlsxBg: '8A7A4A', xlsxFg: 'FFFFFF'};
+        }
+        if (v === 'RES' || /^R\d+$/i.test(v)) {
+            return {bg: '#5f7f6a', fg: '#ffffff', xlsxBg: '5F7F6A', xlsxFg: 'FFFFFF'};
+        }
+        return null;
+    }
+
+    function buildStyledWorksheet(d) {
+        const ws = XLSX.utils.aoa_to_sheet([d.headers, ...d.data]);
+        const chainIdx = Array.isArray(d.headers) ? d.headers.indexOf('Chain') : -1;
+        if (chainIdx < 0) return ws;
+
+        for (let r = 0; r < d.data.length; r++) {
+            const chainVal = d.data[r] && d.data[r][chainIdx];
+            const color = getChainColorMeta(chainVal);
+            if (!color) continue;
+
+            const cellRef = XLSX.utils.encode_cell({r: r + 1, c: chainIdx});
+            if (!ws[cellRef]) continue;
+            ws[cellRef].s = {
+                fill: {patternType: 'solid', fgColor: {rgb: color.xlsxBg}},
+                font: {color: {rgb: color.xlsxFg}, bold: true}
+            };
+        }
+        return ws;
+    }
+
+    function previewSheet(key) {
+        const sheetData = globalAnalysisResults[key];
+        const modal = document.getElementById('previewModal');
+        document.getElementById('modalTitle').textContent = `預覽: ${key}`;
+        let html = '<table><thead><tr>';
+        const chainIdx = sheetData.headers.indexOf('Chain');
+        sheetData.headers.forEach((h) => {
+            html += `<th>${h}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+        sheetData.data.forEach(row => {
+            const color = chainIdx >= 0 ? getChainColorMeta(row[chainIdx]) : null;
+            html += '<tr>';
+            row.forEach((cell, idx) => {
+                if (idx === chainIdx) {
+                    if (color) {
+                        html += `<td style="background:${color.bg}; color:${color.fg}; font-weight:bold;">${cell}</td>`;
+                        return;
+                    }
+                }
+                html += `<td>${cell}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        document.getElementById('modalTableContainer').innerHTML = html;
+        modal.style.display = 'block';
+    }
+
+    function exportSingleSheet(key) {
+        const d = globalAnalysisResults[key];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, buildStyledWorksheet(d), key);
+        XLSX.writeFile(wb, `${key}.xlsx`, {cellStyles: true, bookType: 'xlsx'});
+    }
+
+    function exportSelectedCards() {
+        const cbs = document.querySelectorAll('.card-selector:checked');
+        if (cbs.length === 0) { alert("請勾選卡片！"); return; }
+        const wb = XLSX.utils.book_new();
+        let count = 0;
+        cbs.forEach(cb => {
+            const k = cb.value;
+            const d = globalAnalysisResults[k];
+            let safeName = k.length > 31 ? k.substring(0,31) : k;
+            try { XLSX.utils.book_append_sheet(wb, buildStyledWorksheet(d), safeName); count++; } catch(e){}
+        });
+        if (count > 0) {
+            const base = rawFileName || 'NetList';
+            XLSX.writeFile(wb, `${base}_NetList_Result.xlsx`, {cellStyles: true, bookType: 'xlsx'});
+        }
+    }
+</script>
+</body>
+</html>
