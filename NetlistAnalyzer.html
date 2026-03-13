@@ -142,7 +142,15 @@
         button:disabled { background-color: #555; cursor: not-allowed; }
         .btn-green { background-color: var(--success-color); }
         .btn-small { padding: 4px 10px; font-size: 12px; margin-top: 0; background-color: #555; margin-right: 5px; }
-        .btn-action-group { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #333; }
+        .btn-action-group {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
         .group-section { margin-bottom: 18px; }
         .group-title {
             font-weight: bold;
@@ -268,25 +276,32 @@
     <h1>⚡ Netlist 智慧分析儀 v3.5</h1>
     
     <div class="panel">
-        <h3>1. 選擇檔案</h3>
-        <input type="file" id="fileInput" accept=".asc,.txt">
+        <h3 style="cursor: pointer;" onclick="toggleDiv('fileDetails')">
+            1. 選擇檔案 (點擊展開/收合) ▼
+        </h3>
+        <div id="fileDetails">
+            <input type="file" id="fileInput" accept=".asc,.txt">
+        </div>
     </div>
 
     <div class="panel">
-        <h3>2. 設定查詢目標 (Targets)</h3>
-        
-        <label>常用目標 (勾選後會合併下方文字框內容)：</label>
-        <div style="margin-bottom: 5px;">
-            <button class="btn-small" onclick="toggleCheckboxes('preset-target', true)">全選目標</button>
-            <button class="btn-small" onclick="toggleCheckboxes('preset-target', false)">取消全選</button>
-            <button class="btn-small" onclick="removeSelectedTargets()">刪除勾選目標</button>
-        </div>
-        <div class="checkbox-grid" id="presetArea"></div>
+        <h3 style="cursor: pointer;" onclick="toggleDiv('targetDetails')">
+            2. 設定查詢目標 (Targets) (點擊展開/收合) ▼
+        </h3>
+        <div id="targetDetails">
+            <label>常用目標 (勾選後會合併下方文字框內容)：</label>
+            <div style="margin-bottom: 5px;">
+                <button class="btn-small" onclick="toggleCheckboxes('preset-target', true)">全選目標</button>
+                <button class="btn-small" onclick="toggleCheckboxes('preset-target', false)">取消全選</button>
+                <button class="btn-small" onclick="removeSelectedTargets()">刪除勾選目標</button>
+            </div>
+            <div class="checkbox-grid" id="presetArea"></div>
 
-        <label for="targetInput">手動輸入目標 (以逗號或換行分隔)：</label>
-        <textarea id="targetInput" placeholder="例如: U1, R203..."></textarea>
-        <div style="margin-top: 8px;">
-            <button class="btn-small" onclick="clearSavedTargets()">🧹 清除已記憶目標</button>
+            <label for="targetInput">手動輸入目標 (以逗號或換行分隔)：</label>
+            <textarea id="targetInput" placeholder="例如: U1, R203..."></textarea>
+            <div style="margin-top: 8px;">
+                <button class="btn-small" onclick="clearSavedTargets()">🧹 清除已記憶目標</button>
+            </div>
         </div>
     </div>
 
@@ -337,8 +352,37 @@
     </div>
 
     <div class="panel">
-        <button id="analyzeBtn" onclick="startAnalysis()" disabled>🚀 開始分析</button>
-        <div id="logArea">等待檔案載入...</div>
+        <h3 style="cursor: pointer;" onclick="toggleDiv('testCardModeDetails')">
+            4. Test Card 樣式設定 (點擊展開/收合) ▼
+        </h3>
+        <div id="testCardModeDetails">
+            <div style="font-size: 0.85em; color:#aaa; margin-bottom:8px;">
+                用勾選設定 connector 模式（同一個 connector 僅可擇一：single-end 或 loop）。
+            </div>
+            <div style="margin-bottom: 8px;">
+                <button class="btn-small" onclick="refreshModeConnectorOptions()">更新 connector 清單</button>
+                <button class="btn-small" onclick="clearModeSelection('single-end')">清空 single-end</button>
+                <button class="btn-small" onclick="clearModeSelection('loop')">清空 loop</button>
+            </div>
+            <div class="settings-group">
+                <label style="margin-bottom:6px; color:#8ec3ff;">single-end</label>
+                <div class="checkbox-grid" id="modeSingleEndArea"></div>
+            </div>
+            <div class="settings-group">
+                <label style="margin-bottom:6px; color:#b6e3b6;">loop</label>
+                <div class="checkbox-grid" id="modeLoopArea"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3 style="cursor: pointer;" onclick="toggleDiv('runDetails')">
+            5. 分析執行 (點擊展開/收合) ▼
+        </h3>
+        <div id="runDetails">
+            <button id="analyzeBtn" onclick="startAnalysis()" disabled>🚀 開始分析</button>
+            <div id="logArea">等待檔案載入...</div>
+        </div>
     </div>
 
     <div id="resultsArea" class="panel" style="display:none;">
@@ -354,22 +398,22 @@
             <button class="btn-small" onclick="toggleResultCards(true)">☑️ 全選卡片</button>
             <button class="btn-small" onclick="toggleResultCards(false)">⬜ 取消全選</button>
             <button class="btn-small" onclick="resetManualGrouping()">清空分組</button>
-        </div>
-        <div id="manualGroupSpecBox" class="manual-group-spec">
-            <div style="font-size:12px; color:#aaa; margin-bottom:6px;">文字分組（可貼上：group 1 / group 2 ...）</div>
-            <textarea id="manualGroupSpecInput" style="height:95px;" placeholder="group 1&#10;J1_LPU1 J2_LPU1 J1_LPU2&#10;J2_LPU2 J1_LPU3 J2_LPU3&#10;group 2&#10;J0A J0B J0C&#10;J0D"></textarea>
-            <div style="margin-top:6px;">
-                <button class="btn-small" onclick="applyManualGroupSpec()">套用文字分組</button>
-            </div>
-        </div>
-
-        <div class="cards-container" id="cardsContainer"></div>
-        <div style="margin-top:10px; padding-top:8px; border-top:1px solid #333;">
-            <label for="newGroupNameInput" style="display:inline; margin-right:8px; color:#aaa;">新增 Group</label>
+            <label for="newGroupNameInput" style="display:inline; margin-left:8px; margin-right:4px; color:#aaa;">新增 Group</label>
             <input id="newGroupNameInput" type="text" placeholder="例如: group DEBUG"
                 style="background:#2d2d2d; color:#fff; border:1px solid #555; border-radius:4px; padding:6px 8px; min-width:220px;">
             <button class="btn-small" onclick="addManualGroup()">新增</button>
         </div>
+        <div id="manualGroupSpecBox" class="manual-group-spec">
+            <div style="font-size:12px; color:#aaa; margin-bottom:6px;">勾選式分群設定</div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <label for="groupAssignSelect" style="display:inline; margin:0; color:#aaa;">目前編輯 Group</label>
+                <select id="groupAssignSelect" style="background:#2d2d2d; color:#fff; border:1px solid #555; border-radius:4px; padding:4px 6px;"></select>
+                <button class="btn-small" onclick="refreshGroupAssignControls()">重新整理</button>
+            </div>
+            <div class="checkbox-grid" id="groupAssignArea" style="max-height: 210px;"></div>
+        </div>
+
+        <div class="cards-container" id="cardsContainer"></div>
     </div>
 </div>
 
@@ -483,6 +527,9 @@
         presetSelected: 'netlistAnalyzer.presetSelected',
         presetBaseTargets: 'netlistAnalyzer.presetBaseTargets',
         showOnlyWithChain: 'netlistAnalyzer.showOnlyWithChain',
+        modeSingleEnd: 'netlistAnalyzer.modeSingleEnd',
+        modeLoop: 'netlistAnalyzer.modeLoop',
+        groupAssignSelected: 'netlistAnalyzer.groupAssignSelected',
         groupMode: 'netlistAnalyzer.groupMode',
         manualGroupCount: 'netlistAnalyzer.manualGroupCount',
         manualGroupMap: 'netlistAnalyzer.manualGroupMap',
@@ -526,6 +573,124 @@
         saveSetting(STORAGE_KEYS.presetSelected, selected);
     }
 
+    function getModeSelection(mode) {
+        const cls = mode === 'single-end' ? '.mode-single-end:checked' : '.mode-loop:checked';
+        return Array.from(document.querySelectorAll(cls)).map(cb => cb.value);
+    }
+
+    function saveModeSelection(mode) {
+        const key = mode === 'single-end' ? STORAGE_KEYS.modeSingleEnd : STORAGE_KEYS.modeLoop;
+        saveSetting(key, getModeSelection(mode));
+    }
+
+    function refreshModeConnectorOptions() {
+        const targetRaw = document.getElementById('targetInput') ? document.getElementById('targetInput').value : "";
+        const merged = getMergedTargets(targetRaw);
+        const modeTargets = [...new Set(merged.map(x => String(x).trim()).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
+
+        const singleSaved = new Set(loadSetting(STORAGE_KEYS.modeSingleEnd, []));
+        const loopSaved = new Set(loadSetting(STORAGE_KEYS.modeLoop, []));
+        const singleArea = document.getElementById('modeSingleEndArea');
+        const loopArea = document.getElementById('modeLoopArea');
+        if (!singleArea || !loopArea) return;
+        singleArea.innerHTML = "";
+        loopArea.innerHTML = "";
+
+        modeTargets.forEach(target => {
+            const isSingle = singleSaved.has(target);
+            const isLoop = loopSaved.has(target);
+
+            const divA = document.createElement('div');
+            divA.className = 'checkbox-item';
+            divA.innerHTML = `<label><input type="checkbox" class="mode-single-end" value="${target}" ${isSingle ? 'checked' : ''}> ${target}</label>`;
+            singleArea.appendChild(divA);
+
+            const divB = document.createElement('div');
+            divB.className = 'checkbox-item';
+            divB.innerHTML = `<label><input type="checkbox" class="mode-loop" value="${target}" ${isLoop ? 'checked' : ''}> ${target}</label>`;
+            loopArea.appendChild(divB);
+        });
+
+        document.querySelectorAll('.mode-single-end').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    const pair = document.querySelector(`.mode-loop[value="${e.target.value}"]`);
+                    if (pair) pair.checked = false;
+                }
+                saveModeSelection('single-end');
+                saveModeSelection('loop');
+            });
+        });
+        document.querySelectorAll('.mode-loop').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    const pair = document.querySelector(`.mode-single-end[value="${e.target.value}"]`);
+                    if (pair) pair.checked = false;
+                }
+                saveModeSelection('loop');
+                saveModeSelection('single-end');
+            });
+        });
+    }
+
+    function clearModeSelection(mode) {
+        const cls = mode === 'single-end' ? '.mode-single-end' : '.mode-loop';
+        document.querySelectorAll(cls).forEach(cb => cb.checked = false);
+        saveModeSelection(mode);
+    }
+
+    function refreshGroupAssignControls() {
+        const selectEl = document.getElementById('groupAssignSelect');
+        const areaEl = document.getElementById('groupAssignArea');
+        if (!selectEl || !areaEl) return;
+
+        const parsed = parseManualGroupSpec(manualGroupSpec);
+        const groups = parsed.groups;
+        selectEl.innerHTML = "";
+        groups.forEach(g => {
+            const opt = document.createElement('option');
+            opt.value = g;
+            opt.textContent = g;
+            selectEl.appendChild(opt);
+        });
+        if (groups.length === 0) return;
+
+        const savedSelected = loadSetting(STORAGE_KEYS.groupAssignSelected, groups[0]);
+        selectEl.value = groups.includes(savedSelected) ? savedSelected : groups[0];
+        saveSetting(STORAGE_KEYS.groupAssignSelected, selectEl.value);
+
+        const targets = Object.keys(globalAnalysisResults).length > 0
+            ? Object.keys(globalAnalysisResults).map(k => k.startsWith('LINK_') ? k.substring(5) : k)
+            : getMergedTargets(document.getElementById('targetInput').value);
+        const sortedTargets = [...new Set(targets)].sort((a, b) =>
+            a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+        );
+
+        const selectedGroup = selectEl.value;
+        areaEl.innerHTML = "";
+        sortedTargets.forEach(target => {
+            const key = `LINK_${target}`;
+            const checked = manualGroupMap[key] === selectedGroup;
+            const div = document.createElement('div');
+            div.className = 'checkbox-item';
+            div.innerHTML = `<label><input type="checkbox" class="group-assign-cb" value="${target}" ${checked ? 'checked' : ''}> ${target}</label>`;
+            areaEl.appendChild(div);
+        });
+
+        areaEl.querySelectorAll('.group-assign-cb').forEach(cb => {
+            cb.addEventListener('change', (ev) => {
+                const target = ev.target.value;
+                const key = `LINK_${target}`;
+                const group = selectEl.value;
+                if (ev.target.checked) manualGroupMap[key] = group;
+                else if (manualGroupMap[key] === group) delete manualGroupMap[key];
+                saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
+                if (Object.keys(globalAnalysisResults).length > 0) renderCards();
+            });
+        });
+    }
+
     function parseTargetText(raw) {
         return String(raw || "")
             .split(/[\n,]+/)
@@ -555,7 +720,10 @@
             div.innerHTML = `<label><input type="checkbox" class="preset-target" value="${target}" ${checked ? 'checked' : ''}> ${target}</label>`;
             grid.appendChild(div);
         });
-        document.querySelectorAll('.preset-target').forEach(cb => cb.addEventListener('change', savePresetSelection));
+        document.querySelectorAll('.preset-target').forEach(cb => cb.addEventListener('change', () => {
+            savePresetSelection();
+            refreshModeConnectorOptions();
+        }));
     }
 
     function clearSavedTargets() {
@@ -564,6 +732,7 @@
         const selectedNow = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
         renderTargetCheckboxes(baseTargets, selectedNow.length > 0 ? selectedNow : baseTargets);
         savePresetSelection();
+        refreshModeConnectorOptions();
         log("已清除手動目標記憶。");
     }
 
@@ -579,6 +748,7 @@
         const merged = getMergedTargets(document.getElementById('targetInput').value);
         renderTargetCheckboxes(merged, merged);
         savePresetSelection();
+        refreshModeConnectorOptions();
         log(`已刪除 ${selected.length} 個目標。`);
     }
 
@@ -586,6 +756,7 @@
         const specBox = document.getElementById('manualGroupSpecBox');
         if (!specBox) return;
         specBox.style.display = 'block';
+        refreshGroupAssignControls();
     }
 
     function normalizeGroupName(name) {
@@ -610,8 +781,7 @@
         if (!existing.has(groupName.toLowerCase())) {
             manualGroupSpec = current ? `${current}\n\n${groupName}` : groupName;
             saveSetting(STORAGE_KEYS.manualGroupSpec, manualGroupSpec);
-            const specInput = document.getElementById('manualGroupSpecInput');
-            if (specInput) specInput.value = manualGroupSpec;
+            refreshGroupAssignControls();
             renderCards();
         }
         input.value = '';
@@ -677,23 +847,6 @@
             .join('\n\n');
     }
 
-    function applyManualGroupSpec() {
-        const input = document.getElementById('manualGroupSpecInput');
-        if (!input) return;
-        manualGroupSpec = input.value || "";
-        saveSetting(STORAGE_KEYS.manualGroupSpec, manualGroupSpec);
-
-        const parsed = parseManualGroupSpec(manualGroupSpec);
-        Object.keys(manualGroupMap).forEach(k => delete manualGroupMap[k]);
-        Object.keys(globalAnalysisResults).forEach(key => {
-            const target = key.startsWith('LINK_') ? key.substring(5) : key;
-            const g = parsed.assignmentByTarget[target];
-            if (g) manualGroupMap[key] = g;
-        });
-        saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
-        renderCards();
-    }
-
     function applyManualGroupCount() {
         const input = document.getElementById('manualGroupCount');
         if (!input) return;
@@ -711,9 +864,13 @@
 
     function resetManualGrouping() {
         manualGroupMap = {};
+        manualGroupSpec = "";
         manualSelectedKeys = new Set();
         manualAnchorKey = null;
         saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
+        saveSetting(STORAGE_KEYS.manualGroupSpec, manualGroupSpec);
+        saveSetting(STORAGE_KEYS.groupAssignSelected, "");
+        refreshGroupAssignControls();
         renderCards();
     }
 
@@ -813,13 +970,20 @@
         document.getElementById('bannedInput').value = loadSetting(STORAGE_KEYS.bannedInput, DEFAULT_BANNED.join(', '));
         document.getElementById('capInput').value = loadSetting(STORAGE_KEYS.capInput, DEFAULT_CAP_IGNORE.join(', '));
         document.getElementById('pinIgnoreInput').value = loadSetting(STORAGE_KEYS.pinIgnoreInput, DEFAULT_PIN_IGNORE.join(', '));
+        refreshModeConnectorOptions();
 
         document.getElementById('enableGlobalFilter').checked = loadSetting(STORAGE_KEYS.enableGlobalFilter, true);
         document.getElementById('enableCapFilter').checked = loadSetting(STORAGE_KEYS.enableCapFilter, true);
         document.getElementById('enablePinFilter').checked = loadSetting(STORAGE_KEYS.enablePinFilter, true);
         document.getElementById('showOnlyWithChain').checked = loadSetting(STORAGE_KEYS.showOnlyWithChain, false);
-        document.getElementById('manualGroupSpecInput').value = manualGroupSpec;
         updateGroupModeUI();
+        const groupAssignSelect = document.getElementById('groupAssignSelect');
+        if (groupAssignSelect) {
+            groupAssignSelect.addEventListener('change', (e) => {
+                saveSetting(STORAGE_KEYS.groupAssignSelected, e.target.value);
+                refreshGroupAssignControls();
+            });
+        }
 
         toggleTextarea('bannedInput', document.getElementById('enableGlobalFilter').checked);
         toggleTextarea('capInput', document.getElementById('enableCapFilter').checked);
@@ -836,6 +1000,7 @@
             parseTargetText(raw).forEach(t => selectedSet.add(t));
             renderTargetCheckboxes(merged, Array.from(selectedSet));
             savePresetSelection();
+            refreshModeConnectorOptions();
         });
         document.getElementById('bannedInput').addEventListener('input', (e) => {
             saveSetting(STORAGE_KEYS.bannedInput, e.target.value);
@@ -888,7 +1053,10 @@
 
     function toggleCheckboxes(className, checked) {
         document.querySelectorAll('.' + className).forEach(cb => cb.checked = checked);
-        if (className === 'preset-target') savePresetSelection();
+        if (className === 'preset-target') {
+            savePresetSelection();
+            refreshModeConnectorOptions();
+        }
     }
 
     function toggleResultCards(checked) {
@@ -933,6 +1101,13 @@
         return raw.split(/[\n,]+/).map(s => s.trim()).filter(s => s !== "");
     }
 
+    function buildModeSetsFromCheckboxes() {
+        return {
+            'single-end': new Set(getModeSelection('single-end').map(x => x.toUpperCase())),
+            'loop': new Set(getModeSelection('loop').map(x => x.toUpperCase()))
+        };
+    }
+
     function isWildcardMatch(text, patternList) {
         if (!text) return false;
         text = text.toUpperCase();
@@ -970,6 +1145,7 @@
     function startAnalysis() {
         if (!rawFileContent) return;
         const showOnlyWithChain = document.getElementById('showOnlyWithChain').checked;
+        const testCardModeSets = buildModeSetsFromCheckboxes();
 
         const checkedTargets = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
         const manualTargets = parseInputList('targetInput');
@@ -1056,6 +1232,7 @@
             'TestCardTarget_NetNAME',
             'VOLTAGE LEVEL',
             'PULL_HIGH_VOLTAG',
+            'MODE',
             'Chain',
             'LinkTarget',
             'LinkTarget_Pin',
@@ -1078,6 +1255,26 @@
 
             if (voltages.size === 0) return '';
             return Array.from(voltages).join('/');
+        }
+
+        function resolveMode(testTarget, linkTarget) {
+            if (!testTarget || !linkTarget) return '';
+            const a = String(testTarget).toUpperCase();
+            const b = String(linkTarget).toUpperCase();
+            const loopSet = testCardModeSets['loop'] || new Set();
+            const singleSet = testCardModeSets['single-end'] || new Set();
+            const aLoop = loopSet.has(a);
+            const bLoop = loopSet.has(b);
+            const aSingle = singleSet.has(a);
+            const bSingle = singleSet.has(b);
+
+            // Rule: one side is loop => loop; both loop => empty.
+            if ((aLoop || bLoop) && !(aLoop && bLoop)) return 'loop';
+            if (aLoop && bLoop) return '';
+
+            // Keep previous behavior for single-end pair.
+            if (aSingle && bSingle) return 'single-end';
+            return '';
         }
 
         const linkMap = {};
@@ -1168,7 +1365,7 @@
 
                 if (links.length === 0) {
                     if (showOnlyWithChain) return;
-                    rows.push([target, pin, testPinName, testNet, '', pullHighVoltage, '', '', '', '', '']);
+                    rows.push([target, pin, testPinName, testNet, '', pullHighVoltage, '', '', '', '', '', '']);
                     return;
                 }
 
@@ -1179,6 +1376,7 @@
                     const linkPinName = linkPinParts ? getPinName(linkPinParts) : '';
                     const linkNetName = link.linkNet || (linkPinParts ? getNetName(linkPinParts) : '');
                     const voltage = extractVoltageLevelFromNets(link.testNet, linkNetName);
+                    const mode = resolveMode(target, link.linkTarget);
 
                     rows.push([
                         target,
@@ -1187,6 +1385,7 @@
                         testNet,
                         voltage,
                         pullHighVoltage,
+                        mode,
                         link.chain,
                         link.linkTarget,
                         link.linkPin,
@@ -1196,7 +1395,7 @@
                 });
             });
 
-            const chainSet = new Set(rows.map(r => r[6]).filter(v => v && String(v).trim() !== ''));
+            const chainSet = new Set(rows.map(r => r[7]).filter(v => v && String(v).trim() !== ''));
             const normalizedChainSet = new Set(
                 Array.from(chainSet).map(v => (/^R\d+$/i.test(v) ? 'RES' : v))
             );
@@ -1225,8 +1424,6 @@
         if (!manualGroupSpec || !manualGroupSpec.trim()) {
             manualGroupSpec = buildDefaultGroupSpecB(selectedTargets);
             saveSetting(STORAGE_KEYS.manualGroupSpec, manualGroupSpec);
-            const specInput = document.getElementById('manualGroupSpecInput');
-            if (specInput) specInput.value = manualGroupSpec;
         }
 
         // Apply grouping based on current saved text spec (custom or default).
@@ -1243,6 +1440,7 @@
         saveSetting(STORAGE_KEYS.manualGroupMap, manualGroupMap);
 
         renderCards();
+        refreshGroupAssignControls();
         log("分析完成。");
     }
 
@@ -1331,6 +1529,7 @@
             if (cb) {
                 cb.addEventListener('change', (ev) => {
                     cardSelectionMap[key] = ev.target.checked;
+                    renderCards();
                 });
             }
             return card;
@@ -1378,7 +1577,23 @@
             section.className = 'group-section manual-group-column manual-group-row';
             const title = document.createElement('div');
             title.className = 'group-title';
-            title.textContent = `${groupName} (${manualGroups[groupName].length})`;
+            const groupKeys = manualGroups[groupName];
+            const selectedCount = groupKeys.filter(k => !!cardSelectionMap[k]).length;
+            const allChecked = groupKeys.length > 0 && selectedCount === groupKeys.length;
+            const partialChecked = selectedCount > 0 && selectedCount < groupKeys.length;
+
+            title.innerHTML = `<label style="display:flex; align-items:center; gap:6px; margin:0;">
+                <input type="checkbox" class="group-selector" ${allChecked ? 'checked' : ''}>
+                <span>${groupName} (${groupKeys.length})</span>
+            </label>`;
+            const groupCb = title.querySelector('.group-selector');
+            if (groupCb) {
+                groupCb.indeterminate = partialChecked;
+                groupCb.addEventListener('change', (ev) => {
+                    groupKeys.forEach(k => { cardSelectionMap[k] = ev.target.checked; });
+                    renderCards();
+                });
+            }
             section.appendChild(title);
 
             const grid = document.createElement('div');
@@ -1430,20 +1645,57 @@
         return ws;
     }
 
+    function updateModeCell(key, rowIndex, value) {
+        const d = globalAnalysisResults[key];
+        if (!d || !Array.isArray(d.data)) return;
+        const modeIdx = Array.isArray(d.headers) ? d.headers.indexOf('MODE') : -1;
+        if (modeIdx < 0) return;
+        if (!d.data[rowIndex]) return;
+        d.data[rowIndex][modeIdx] = String(value || '').trim();
+    }
+
+    function getModeColorMeta(modeValue) {
+        const v = String(modeValue || '').toLowerCase();
+        if (v === 'single-end') return {bg: '#3f617a', fg: '#ffffff'};
+        if (v === 'loop') return {bg: '#4f7259', fg: '#ffffff'};
+        if (v === 'other') return {bg: '#7a6440', fg: '#ffffff'};
+        return {bg: '#2d2d2d', fg: '#ffffff'};
+    }
+
+    function onModeSelectChange(selectEl, key, rowIndex) {
+        if (!selectEl) return;
+        updateModeCell(key, rowIndex, selectEl.value);
+        const c = getModeColorMeta(selectEl.value);
+        selectEl.style.background = c.bg;
+        selectEl.style.color = c.fg;
+    }
+
     function previewSheet(key) {
         const sheetData = globalAnalysisResults[key];
         const modal = document.getElementById('previewModal');
         document.getElementById('modalTitle').textContent = `預覽: ${key}`;
         let html = '<table><thead><tr>';
         const chainIdx = sheetData.headers.indexOf('Chain');
+        const modeIdx = sheetData.headers.indexOf('MODE');
         sheetData.headers.forEach((h) => {
             html += `<th>${h}</th>`;
         });
         html += '</tr></thead><tbody>';
-        sheetData.data.forEach(row => {
+        sheetData.data.forEach((row, rowIdx) => {
             const color = chainIdx >= 0 ? getChainColorMeta(row[chainIdx]) : null;
             html += '<tr>';
             row.forEach((cell, idx) => {
+                if (idx === modeIdx) {
+                    const v = String(cell || '');
+                    const c = getModeColorMeta(v);
+                    html += `<td><select style="background:${c.bg}; color:${c.fg}; border:1px solid #555; border-radius:4px; padding:2px 6px;" onchange="onModeSelectChange(this, '${key}', ${rowIdx})">
+                        <option value="" ${v === '' ? 'selected' : ''}></option>
+                        <option value="single-end" ${v === 'single-end' ? 'selected' : ''}>single-end</option>
+                        <option value="loop" ${v === 'loop' ? 'selected' : ''}>loop</option>
+                        <option value="other" ${v === 'other' ? 'selected' : ''}>other</option>
+                    </select></td>`;
+                    return;
+                }
                 if (idx === chainIdx) {
                     if (color) {
                         html += `<td style="background:${color.bg}; color:${color.fg}; font-weight:bold;">${cell}</td>`;
