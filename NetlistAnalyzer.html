@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Netlist 智慧分析儀 v3.3 (含使用手冊)</title>
+    <title>Netlist 智慧分析儀 v3.5 (含使用手冊)</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -265,7 +265,7 @@
 <div class="help-btn" onclick="openHelp()" title="開啟使用手冊">?</div>
 
 <div class="container">
-    <h1>⚡ Netlist 智慧分析儀 v3.3</h1>
+    <h1>⚡ Netlist 智慧分析儀 v3.5</h1>
     
     <div class="panel">
         <h3>1. 選擇檔案</h3>
@@ -506,6 +506,7 @@
     let manualAnchorKey = null;
     let manualVisibleOrder = [];
     let manualDragging = false;
+    let cardSelectionMap = {};
 
     function saveSetting(key, value) {
         try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
@@ -891,7 +892,10 @@
     }
 
     function toggleResultCards(checked) {
-        document.querySelectorAll('.card-selector').forEach(cb => cb.checked = checked);
+        document.querySelectorAll('.card-selector').forEach(cb => {
+            cb.checked = checked;
+            cardSelectionMap[cb.value] = checked;
+        });
     }
 
     function log(msg) {
@@ -1051,8 +1055,7 @@
             'TestCardTarget_PinName',
             'TestCardTarget_NetNAME',
             'VOLTAGE LEVEL',
-            'PULL_HIGH',
-            'PULL_HIGH_VOLTAGE',
+            'PULL_HIGH_VOLTAG',
             'Chain',
             'LinkTarget',
             'LinkTarget_Pin',
@@ -1061,7 +1064,7 @@
         ];
 
         function detectPullHighInfo(testNet) {
-            if (!testNet) return {flag: '', voltage: ''};
+            if (!testNet) return '';
             const resList = dResAllByNet[testNet] || [];
             const voltages = new Set();
 
@@ -1073,8 +1076,8 @@
                 if (v) voltages.add(v);
             });
 
-            if (voltages.size === 0) return {flag: '', voltage: ''};
-            return {flag: 'Y', voltage: Array.from(voltages).join('/')};
+            if (voltages.size === 0) return '';
+            return Array.from(voltages).join('/');
         }
 
         const linkMap = {};
@@ -1160,12 +1163,12 @@
                 const pinParts = dPinsByPart[target][pin];
                 const testPinName = getPinName(pinParts);
                 const testNet = getNetName(pinParts);
-                const pullHigh = detectPullHighInfo(testNet);
+                const pullHighVoltage = detectPullHighInfo(testNet);
                 const links = linkMap[`${target}__${pin}`] || [];
 
                 if (links.length === 0) {
                     if (showOnlyWithChain) return;
-                    rows.push([target, pin, testPinName, testNet, '', pullHigh.flag, pullHigh.voltage, '', '', '', '', '']);
+                    rows.push([target, pin, testPinName, testNet, '', pullHighVoltage, '', '', '', '', '']);
                     return;
                 }
 
@@ -1183,8 +1186,7 @@
                         testPinName,
                         testNet,
                         voltage,
-                        pullHigh.flag,
-                        pullHigh.voltage,
+                        pullHighVoltage,
                         link.chain,
                         link.linkTarget,
                         link.linkPin,
@@ -1194,7 +1196,7 @@
                 });
             });
 
-            const chainSet = new Set(rows.map(r => r[7]).filter(v => v && String(v).trim() !== ''));
+            const chainSet = new Set(rows.map(r => r[6]).filter(v => v && String(v).trim() !== ''));
             const normalizedChainSet = new Set(
                 Array.from(chainSet).map(v => (/^R\d+$/i.test(v) ? 'RES' : v))
             );
@@ -1255,6 +1257,13 @@
             container.innerHTML = "<p style='color:#aaa'>沒有資料。</p>";
             return;
         }
+        // Keep checkbox state stable across re-renders.
+        sortedKeys.forEach(key => {
+            if (typeof cardSelectionMap[key] === 'undefined') cardSelectionMap[key] = true;
+        });
+        Object.keys(cardSelectionMap).forEach(key => {
+            if (!globalAnalysisResults[key]) delete cardSelectionMap[key];
+        });
         container.style.display = 'block';
         container.style.gridTemplateColumns = '';
         container.style.gap = '0';
@@ -1264,12 +1273,25 @@
             const card = document.createElement('div');
             card.className = 'result-card';
             if (draggableMode) {
-                card.draggable = true;
-                card.style.cursor = 'grab';
+                card.draggable = false;
+                card.style.cursor = 'default';
                 if (manualSelectedKeys.has(key)) card.classList.add('manual-selected');
-                card.title = '按 Shift 可多選，拖曳可整批移動';
+                card.title = '按 Shift 可多選；僅可從卡片右半邊拖曳移動';
                 card.addEventListener('click', (ev) => onManualCardClick(ev, key));
-                card.addEventListener('dragstart', (ev) => onCardDragStart(ev, key));
+                card.addEventListener('mousedown', (ev) => {
+                    if (ev.button !== 0) { card.draggable = false; return; }
+                    if (ev.target && ev.target.closest && ev.target.closest('input,button,label')) {
+                        card.draggable = false;
+                        return;
+                    }
+                    const rect = card.getBoundingClientRect();
+                    const isRightHalf = ev.clientX >= (rect.left + rect.width / 2);
+                    card.draggable = isRightHalf;
+                });
+                card.addEventListener('dragstart', (ev) => {
+                    if (!card.draggable) { ev.preventDefault(); return; }
+                    onCardDragStart(ev, key);
+                });
                 card.addEventListener('dragend', onCardDragEnd);
             }
             
@@ -1287,11 +1309,12 @@
                 return `<span style="${style} padding:2px 6px; border-radius:4px; font-size:12px;">${tag}</span>`;
             };
             const badgesHtml = tags.map(renderTag).join(' ');
+            const checkedAttr = cardSelectionMap[key] ? 'checked' : '';
 
             card.innerHTML = `
                 <div class="card-header">
                     <div style="display:flex; align-items:center;">
-                        <input type="checkbox" class="card-selector" value="${key}" checked>
+                        <input type="checkbox" class="card-selector" value="${key}" ${checkedAttr}>
                         <span class="card-title">${key}</span>
                     </div>
                     <div style="display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end;">${badgesHtml}</div>
@@ -1304,6 +1327,12 @@
                     <button class="btn-small btn-green" onclick="exportSingleSheet('${key}')">💾 下載</button>
                 </div>
             `;
+            const cb = card.querySelector('.card-selector');
+            if (cb) {
+                cb.addEventListener('change', (ev) => {
+                    cardSelectionMap[key] = ev.target.checked;
+                });
+            }
             return card;
         };
 
