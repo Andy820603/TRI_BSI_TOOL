@@ -112,6 +112,19 @@
             cursor: pointer;
         }
         .checkbox-item input { margin-right: 5px; cursor: pointer; }
+        #compareColumnArea {
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        }
+        #compareColumnArea .checkbox-item {
+            align-items: flex-start;
+        }
+        #compareColumnArea .checkbox-item label {
+            margin-bottom: 0;
+            line-height: 1.25;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
 
         /* 設定區塊 */
         .settings-group {
@@ -388,6 +401,16 @@
                 <label for="unsafePenaltyInput" style="margin-bottom:6px;">unsafe 罰則強度（越大越避開相鄰）</label>
                 <input id="unsafePenaltyInput" type="number" min="100" max="1000000" step="100" value="10000">
             </div>
+            <div class="settings-group" style="margin-bottom:10px;">
+                <div class="toggle-header" style="margin-bottom:8px;">
+                    <input type="checkbox" class="toggle" id="enableDeterministicPairing">
+                    <label for="enableDeterministicPairing" style="margin:0; color:#9fd6ff;">啟用固定配對設定（勾選才可編輯）</label>
+                </div>
+                <div id="deterministicPairingDetails">
+                    <label for="terminalGroupInput" style="margin-bottom:6px;">同端子群組（每行一個範圍，如 J1_LPU1:16）</label>
+                    <textarea id="terminalGroupInput" style="height:72px;" placeholder="J1_LPU1:16&#10;J2_LPU1:16"></textarea>
+                </div>
+            </div>
             <button id="analyzeBtn" onclick="startAnalysis()" disabled>🚀 開始分析</button>
             <div id="logArea">等待檔案載入...</div>
         </div>
@@ -423,6 +446,25 @@
                     <button class="btn-small" onclick="refreshGroupAssignControls()">重新整理</button>
                 </div>
                 <div class="checkbox-grid" id="groupAssignArea" style="max-height: 210px;"></div>
+            </div>
+        </div>
+        <div id="compareBox" class="manual-group-spec">
+            <div style="font-size:12px; color:#aaa; margin-bottom:6px; cursor:pointer; user-select:none;"
+                 onclick="toggleDiv('compareDetails')">
+                Compare 設定（點擊展開/收合）▼
+            </div>
+            <div id="compareDetails">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                    <button class="btn-small" onclick="toggleCompareTargets(true)">Target 全選</button>
+                    <button class="btn-small" onclick="toggleCompareTargets(false)">Target 清空</button>
+                    <button class="btn-small" onclick="toggleCompareColumns(true)">欄位全選</button>
+                    <button class="btn-small" onclick="toggleCompareColumns(false)">欄位清空</button>
+                    <button class="btn-small btn-green" onclick="exportCompareSheetByTargetColumns()">Compare 匯出分欄</button>
+                </div>
+                <div style="font-size:12px; color:#9fb8d8; margin:4px 0;">Target</div>
+                <div class="checkbox-grid" id="compareTargetArea" style="max-height: 160px;"></div>
+                <div style="font-size:12px; color:#9fb8d8; margin:8px 0 4px;">Excel 欄位</div>
+                <div class="checkbox-grid" id="compareColumnArea" style="max-height: 200px;"></div>
             </div>
         </div>
 
@@ -552,6 +594,10 @@
         pinIgnoreInput: 'netlistAnalyzer.pinIgnoreInput',
         mcIterations: 'netlistAnalyzer.mcIterations',
         unsafePenalty: 'netlistAnalyzer.unsafePenalty',
+        terminalGroupInput: 'netlistAnalyzer.terminalGroupInput',
+        enableDeterministicPairing: 'netlistAnalyzer.enableDeterministicPairing',
+        compareSelectedTargets: 'netlistAnalyzer.compareSelectedTargets',
+        compareSelectedColumns: 'netlistAnalyzer.compareSelectedColumns',
         enableGlobalFilter: 'netlistAnalyzer.enableGlobalFilter',
         enableCapFilter: 'netlistAnalyzer.enableCapFilter',
         enablePinFilter: 'netlistAnalyzer.enablePinFilter'
@@ -769,8 +815,10 @@
 
     function updateGroupModeUI() {
         const specBox = document.getElementById('manualGroupSpecBox');
+        const compareBox = document.getElementById('compareBox');
         if (!specBox) return;
         specBox.style.display = 'block';
+        if (compareBox) compareBox.style.display = 'block';
         refreshGroupAssignControls();
     }
 
@@ -987,6 +1035,10 @@
         document.getElementById('pinIgnoreInput').value = loadSetting(STORAGE_KEYS.pinIgnoreInput, DEFAULT_PIN_IGNORE.join(', '));
         document.getElementById('mcIterationsInput').value = loadSetting(STORAGE_KEYS.mcIterations, 5000);
         document.getElementById('unsafePenaltyInput').value = loadSetting(STORAGE_KEYS.unsafePenalty, 10000);
+        document.getElementById('terminalGroupInput').value = loadSetting(STORAGE_KEYS.terminalGroupInput, '');
+        const deterministicEnabled = loadSetting(STORAGE_KEYS.enableDeterministicPairing, true);
+        document.getElementById('enableDeterministicPairing').checked = deterministicEnabled;
+        toggleDeterministicPairingUI(deterministicEnabled);
         refreshModeConnectorOptions();
 
         document.getElementById('enableGlobalFilter').checked = loadSetting(STORAGE_KEYS.enableGlobalFilter, true);
@@ -1034,6 +1086,13 @@
         document.getElementById('unsafePenaltyInput').addEventListener('input', (e) => {
             saveSetting(STORAGE_KEYS.unsafePenalty, e.target.value);
         });
+        document.getElementById('terminalGroupInput').addEventListener('input', (e) => {
+            saveSetting(STORAGE_KEYS.terminalGroupInput, e.target.value);
+        });
+        document.getElementById('enableDeterministicPairing').addEventListener('change', (e) => {
+            saveSetting(STORAGE_KEYS.enableDeterministicPairing, e.target.checked);
+            toggleDeterministicPairingUI(e.target.checked);
+        });
 
         document.getElementById('enableGlobalFilter').addEventListener('change', (e) => {
             saveSetting(STORAGE_KEYS.enableGlobalFilter, e.target.checked);
@@ -1074,6 +1133,16 @@
         el.style.opacity = enabled ? "1" : "0.5";
     }
 
+    function toggleDeterministicPairingUI(enabled) {
+        const groupInput = document.getElementById('terminalGroupInput');
+        const details = document.getElementById('deterministicPairingDetails');
+        if (groupInput) {
+            groupInput.disabled = !enabled;
+            groupInput.style.opacity = enabled ? "1" : "0.5";
+        }
+        if (details) details.style.opacity = enabled ? "1" : "0.65";
+    }
+
     function toggleCheckboxes(className, checked) {
         document.querySelectorAll('.' + className).forEach(cb => cb.checked = checked);
         if (className === 'preset-target') {
@@ -1087,6 +1156,118 @@
             cb.checked = checked;
             cardSelectionMap[cb.value] = checked;
         });
+    }
+
+    function saveCompareSelectionState() {
+        const selectedTargets = Array.from(document.querySelectorAll('.compare-target-cb:checked')).map(cb => cb.value);
+        const selectedCols = Array.from(document.querySelectorAll('.compare-col-cb:checked')).map(cb => cb.value);
+        saveSetting(STORAGE_KEYS.compareSelectedTargets, selectedTargets);
+        saveSetting(STORAGE_KEYS.compareSelectedColumns, selectedCols);
+    }
+
+    function refreshCompareControls() {
+        const targetArea = document.getElementById('compareTargetArea');
+        const colArea = document.getElementById('compareColumnArea');
+        if (!targetArea || !colArea) return;
+        targetArea.innerHTML = "";
+        colArea.innerHTML = "";
+        const savedTargets = new Set(loadSetting(STORAGE_KEYS.compareSelectedTargets, []));
+        const savedCols = new Set(loadSetting(STORAGE_KEYS.compareSelectedColumns, []));
+        const hasSavedTargets = savedTargets.size > 0;
+        const hasSavedCols = savedCols.size > 0;
+
+        const keys = Object.keys(globalAnalysisResults).sort((a, b) =>
+            a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+        );
+        keys.forEach((key) => {
+            const display = key.startsWith('LINK_') ? key.substring(5) : key;
+            const div = document.createElement('div');
+            div.className = 'checkbox-item';
+            const checked = hasSavedTargets ? savedTargets.has(key) : true;
+            div.innerHTML = `<label><input type="checkbox" class="compare-target-cb" value="${key}" ${checked ? 'checked' : ''}> ${display}</label>`;
+            targetArea.appendChild(div);
+        });
+
+        if (keys.length === 0) return;
+        const sample = globalAnalysisResults[keys[0]];
+        const headers = Array.isArray(sample.headers) ? sample.headers : [];
+        const allCols = ['CARD', ...headers];
+        allCols.forEach((h) => {
+            const div = document.createElement('div');
+            div.className = 'checkbox-item';
+            const checked = hasSavedCols
+                ? savedCols.has(h)
+                : (h === 'CARD' || h === 'TestCardTarget' || h === 'MODE' || h === 'Chain');
+            div.innerHTML = `<label><input type="checkbox" class="compare-col-cb" value="${h}" ${checked ? 'checked' : ''}> ${h}</label>`;
+            colArea.appendChild(div);
+        });
+
+        document.querySelectorAll('.compare-target-cb').forEach(cb => {
+            cb.addEventListener('change', saveCompareSelectionState);
+        });
+        document.querySelectorAll('.compare-col-cb').forEach(cb => {
+            cb.addEventListener('change', saveCompareSelectionState);
+        });
+    }
+
+    function toggleCompareTargets(checked) {
+        document.querySelectorAll('.compare-target-cb').forEach(cb => cb.checked = checked);
+        saveCompareSelectionState();
+    }
+
+    function toggleCompareColumns(checked) {
+        document.querySelectorAll('.compare-col-cb').forEach(cb => cb.checked = checked);
+        saveCompareSelectionState();
+    }
+
+    function exportCompareSheetByTargetColumns() {
+        const selectedKeys = Array.from(document.querySelectorAll('.compare-target-cb:checked')).map(cb => cb.value);
+        const selectedCols = Array.from(document.querySelectorAll('.compare-col-cb:checked')).map(cb => cb.value);
+        if (selectedKeys.length === 0) { alert('請先勾選至少一個 Target'); return; }
+        if (selectedCols.length === 0) { alert('請先勾選至少一個欄位'); return; }
+
+        const headers = [];
+        const headerMapByKey = {};
+        let maxLen = 0;
+
+        selectedKeys.forEach((key) => {
+            const d = globalAnalysisResults[key];
+            if (!d || !Array.isArray(d.data)) return;
+            headerMapByKey[key] = {};
+            (d.headers || []).forEach((h, i) => { headerMapByKey[key][h] = i; });
+            if (d.data.length > maxLen) maxLen = d.data.length;
+
+            selectedCols.forEach((col) => {
+                headers.push(col);
+            });
+        });
+
+        const rows = [];
+        for (let r = 0; r < maxLen; r++) {
+            const out = [];
+            selectedKeys.forEach((key) => {
+                const d = globalAnalysisResults[key];
+                if (!d || !Array.isArray(d.data)) {
+                    selectedCols.forEach(() => out.push(''));
+                    return;
+                }
+                const row = d.data[r] || null;
+                const hmap = headerMapByKey[key] || {};
+                selectedCols.forEach((col) => {
+                    if (!row) { out.push(''); return; }
+                    if (col === 'CARD') { out.push(key); return; }
+                    const idx = hmap[col];
+                    out.push(Number.isInteger(idx) ? row[idx] : '');
+                });
+            });
+            rows.push(out);
+        }
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        XLSX.utils.book_append_sheet(wb, ws, 'COMPARE_BY_TARGET');
+        const base = rawFileName || 'NetList';
+        XLSX.writeFile(wb, `${base}_Compare_ByTarget.xlsx`, {cellStyles: true, bookType: 'xlsx'});
     }
 
     function log(msg) {
@@ -1171,6 +1352,11 @@
         const testCardModeSets = buildModeSetsFromCheckboxes();
         const mcIterations = Math.max(200, Math.min(200000, Number(document.getElementById('mcIterationsInput')?.value || 5000)));
         const unsafePenaltyWeight = Math.max(100, Math.min(1000000, Number(document.getElementById('unsafePenaltyInput')?.value || 10000)));
+        const deterministicEnabled = !!document.getElementById('enableDeterministicPairing')?.checked;
+        const mcSeedText = deterministicEnabled ? 'TRI_FIXED_SEED' : `AUTO_${Date.now()}`;
+        const terminalGroupRaw = deterministicEnabled
+            ? String(document.getElementById('terminalGroupInput')?.value || '')
+            : '';
 
         const checkedTargets = Array.from(document.querySelectorAll('.preset-target:checked')).map(cb => cb.value);
         const manualTargets = parseInputList('targetInput');
@@ -1189,7 +1375,104 @@
         const isPinIgnored = (net) => isWildcardMatch(net, pinIgnoreList);
 
         log(`開始分析... 目標數: ${selectedTargets.length}`);
-        log(`Loop 配對參數: MC=${mcIterations}, unsafePenalty=${unsafePenaltyWeight}`);
+        log(`Loop 配對參數: MC=${mcIterations}, unsafePenalty=${unsafePenaltyWeight}, deterministic=${deterministicEnabled ? 'ON' : 'OFF'}, seed=${mcSeedText || '(empty)'}`);
+
+        function makeSeededRandom(seedText) {
+            let h = 2166136261 >>> 0;
+            const text = String(seedText || '');
+            for (let i = 0; i < text.length; i++) {
+                h ^= text.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            let state = (h ^ 0x9e3779b9) >>> 0;
+            return function() {
+                state = (state + 0x6D2B79F5) >>> 0;
+                let t = state;
+                t = Math.imul(t ^ (t >>> 15), t | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        }
+
+        function expandConnectorRangeToken(token) {
+            const t = String(token || '').trim();
+            if (!t) return [];
+            let m = t.match(/^(.*?)(\d+)\s*[:~]\s*(\d+)$/);
+            if (!m) m = t.match(/^(.*?)\[(\d+)\s*-\s*(\d+)\]$/);
+            if (!m) return [t];
+            const prefix = m[1];
+            let start = Number(m[2]);
+            let end = Number(m[3]);
+            if (!Number.isFinite(start) || !Number.isFinite(end)) return [t];
+            const step = start <= end ? 1 : -1;
+            const out = [];
+            for (let i = start; step > 0 ? i <= end : i >= end; i += step) out.push(`${prefix}${i}`);
+            return out;
+        }
+
+        function buildTerminalGroupMap(raw) {
+            const map = {};
+            const lines = String(raw || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+            lines.forEach(line => {
+                const expr = line.split('->')[0].trim();
+                const items = expandConnectorRangeToken(expr);
+                const groupName = `TERM_GROUP:${expr.toUpperCase()}`;
+                items.forEach(item => {
+                    const k = String(item || '').trim().toUpperCase();
+                    if (!k) return;
+                    map[k] = groupName;
+                });
+            });
+            return map;
+        }
+        const terminalGroupMap = buildTerminalGroupMap(terminalGroupRaw);
+        const canonicalReturnByGroupAndSource = {};
+
+        function findPinInfoByPinName(part, pinName) {
+            if (!part || !pinName || !dPinsByPart[part]) return null;
+            const target = String(pinName).trim().toUpperCase();
+            const pins = dPinsByPart[part];
+            for (const p in pins) {
+                const parts = pins[p];
+                const name = String(getPinName(parts) || '').trim().toUpperCase();
+                if (name !== target) continue;
+                return { pin: p, pinName: getPinName(parts), netName: getNetName(parts) };
+            }
+            return null;
+        }
+
+        function pinNameDistance(a, b) {
+            const na = parsePureNumericPin(a);
+            const nb = parsePureNumericPin(b);
+            if (na !== null && nb !== null) return Math.abs(na - nb);
+            const pa = parseLgaCoordinate(a);
+            const pb = parseLgaCoordinate(b);
+            if (pa.x === -999 || pa.y === -999 || pb.x === -999 || pb.y === -999) return 999999;
+            const dx = pa.x - pb.x;
+            const dy = pa.y - pb.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function findBestNonAdjacentPinOnTarget(target, preferredPinName, sourcePinName) {
+            if (!target || !dPinsByPart[target]) return null;
+            const pins = dPinsByPart[target];
+            let best = null;
+            Object.keys(pins).forEach(pinNum => {
+                const parts = pins[pinNum];
+                const candName = getPinName(parts);
+                if (!candName) return;
+                if (isAdjacentPinNames(sourcePinName, candName)) return;
+                const cand = {
+                    target: target,
+                    pin: pinNum,
+                    pinName: candName,
+                    netName: getNetName(parts)
+                };
+                const score = pinNameDistance(candName, preferredPinName);
+                if (!best || score < best.score) best = {score, cand};
+            });
+            return best ? best.cand : null;
+        }
 
         const lines = rawFileContent.split(/\r?\n/);
         let dPinsByPart = {}, dPartsByNet = {}, dNetByPartPin = {};
@@ -1321,20 +1604,13 @@
             for (const ch of alphabet) {
                 if (!forbidden.has(ch)) validCols.push(ch);
             }
-            let stop = false;
+            // Support full 2-letter pin columns (e.g. FR, FU) for U1622/U1627 style pin names.
             for (const c1 of alphabet) {
                 if (forbidden.has(c1)) continue;
-                if (c1 > 'E') break;
                 for (const c2 of alphabet) {
                     if (forbidden.has(c2)) continue;
-                    const code = c1 + c2;
-                    validCols.push(code);
-                    if (code === 'ET') {
-                        stop = true;
-                        break;
-                    }
+                    validCols.push(c1 + c2);
                 }
-                if (stop) break;
             }
             const map = {};
             validCols.forEach((code, idx) => { map[code] = idx; });
@@ -1345,8 +1621,9 @@
 
         function getLgaYIndex(numText) {
             const n = Number(numText);
-            if (!Number.isFinite(n) || n < 1 || n > 91 || n === 46) return -999;
-            return n < 46 ? n - 1 : n - 2;
+            // Some packages in this project use row 46 as a valid coordinate.
+            if (!Number.isFinite(n) || n < 1 || n > 91) return -999;
+            return n - 1;
         }
 
         function parseLgaCoordinate(pinName) {
@@ -1380,7 +1657,21 @@
         }
 
         function isUnsafeLgaPair(p1, p2) {
-            return Math.abs(p1.x - p2.x) <= 2 && Math.abs(p1.y - p2.y) <= 1;
+            const dx = Math.abs(p1.x - p2.x);
+            const dy = Math.abs(p1.y - p2.y);
+            // "Adjacent" rule excludes identical pin itself.
+            if (dx === 0 && dy === 0) return false;
+            return dx <= 2 && dy <= 1;
+        }
+
+        function isAdjacentPinNames(pinA, pinB) {
+            const n1 = parsePureNumericPin(pinA);
+            const n2 = parsePureNumericPin(pinB);
+            if (n1 !== null && n2 !== null) return Math.abs(n1 - n2) === 1;
+            const p1 = parseLgaCoordinate(pinA);
+            const p2 = parseLgaCoordinate(pinB);
+            if (p1.x === -999 || p1.y === -999 || p2.x === -999 || p2.y === -999) return false;
+            return isUnsafeLgaPair(p1, p2);
         }
 
         function isPreferredLoopDirection(testTarget, linkTarget) {
@@ -1425,10 +1716,12 @@
             const aLoop = loopModeSet.has(a);
             const bLoop = loopModeSet.has(b);
             if (aLoop === bLoop) return null; // only one side as loop
+            const singleGroupKeyA = terminalGroupMap[a] || a;
+            const singleGroupKeyB = terminalGroupMap[b] || b;
 
             // single-end -> loop
             if (!aLoop && bLoop) {
-                const bucketKey = `${b}@@${a}`;
+                const bucketKey = `${b}@@${singleGroupKeyA}`;
                 return {
                     preferred: true,
                     bucketKey: bucketKey,
@@ -1443,7 +1736,7 @@
             }
 
             // loop -> single-end (still show same loop relationship info)
-            const bucketKey = `${a}@@${b}`;
+            const bucketKey = `${a}@@${singleGroupKeyB}`;
             return {
                 preferred: false,
                 bucketKey: bucketKey,
@@ -1471,8 +1764,8 @@
                     const nj = parsePureNumericPin(nodes[j].pinName);
                     if (ni !== null && nj !== null) {
                         const dist = Math.abs(ni - nj);
-                        const unsafePenalty = dist === 1 ? unsafePenaltyWeight : 0;
-                        return { score: dist + unsafePenalty, dist: Number(dist.toFixed(2)) };
+                        if (dist === 1) return { score: 1000000000 + dist, dist: Number(dist.toFixed(2)) };
+                        return { score: dist, dist: Number(dist.toFixed(2)) };
                     }
                     const pi = parseLgaCoordinate(nodes[i].pinName);
                     const pj = parseLgaCoordinate(nodes[j].pinName);
@@ -1483,9 +1776,8 @@
                     const dx = pi.x - pj.x;
                     const dy = pi.y - pj.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    const unsafePenalty = isUnsafeLgaPair(pi, pj) ? unsafePenaltyWeight : 0;
-                    // Minimize distance first, unsafe as strong penalty but still pairable.
-                    return { score: dist + unsafePenalty, dist: Number(dist.toFixed(2)) };
+                    if (isUnsafeLgaPair(pi, pj)) return { score: 1000000000 + dist, dist: Number(dist.toFixed(2)) };
+                    return { score: dist, dist: Number(dist.toFixed(2)) };
                 }
 
                 function scoreMatching(pairs) {
@@ -1497,10 +1789,12 @@
                     return s;
                 }
 
+                const rand = makeSeededRandom(`${mcSeedText}@@${targetKey}`);
+
                 function randomPerfectMatching(size) {
                     const idx = Array.from({length: size}, (_, i) => i);
                     for (let i = idx.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
+                        const j = Math.floor(rand() * (i + 1));
                         const t = idx[i];
                         idx[i] = idx[j];
                         idx[j] = t;
@@ -1517,8 +1811,8 @@
                     let curScore = bestScore;
 
                     for (let it = 0; it < iterations; it++) {
-                        let a = Math.floor(Math.random() * curPairs.length);
-                        let b = Math.floor(Math.random() * curPairs.length);
+                        let a = Math.floor(rand() * curPairs.length);
+                        let b = Math.floor(rand() * curPairs.length);
                         if (a === b) continue;
                         if (b < a) { const t = a; a = b; b = t; }
                         const [a1, a2] = curPairs[a];
@@ -1539,7 +1833,7 @@
                         }
                         // Simulated annealing style accept.
                         const temp = Math.max(0.01, 1 - (it / iterations));
-                        const accept = delta <= 0 || Math.random() < Math.exp(-delta / temp);
+                        const accept = delta <= 0 || rand() < Math.exp(-delta / temp);
                         if (!accept) continue;
                         curPairs[a] = chosen[0];
                         curPairs[b] = chosen[1];
@@ -1657,6 +1951,8 @@
         // Bucket by (loop connector + external single-end connector) so loopback returns to same single-end side.
         const loopCandidatesByBucket = {};
         const externalByLoopEndpointKey = {};
+        const preferredMetaByBucket = {};
+        const templatePartnerSourceByBucket = {};
         selectedTargets.forEach(target => {
             if (!dPinsByPart[target]) return;
             const sortedPins = Object.keys(dPinsByPart[target]).sort((a, b) =>
@@ -1684,19 +1980,224 @@
                     const external = getExternalEndpointFromPreferredRow(
                         target, pin, testPinName, testNet
                     );
+                    if (!preferredMetaByBucket[loopCtx.bucketKey]) {
+                        preferredMetaByBucket[loopCtx.bucketKey] = {
+                            sourceByLoopKey: {},
+                            loopByTargetAndSource: {}
+                        };
+                    }
+                    const meta = preferredMetaByBucket[loopCtx.bucketKey];
+                    const srcKey = String(testPinName || '').trim().toUpperCase();
+                    const tKey = String(target || '').toUpperCase();
+                    meta.sourceByLoopKey[endpoint.key] = srcKey;
+                    if (!meta.loopByTargetAndSource[tKey]) meta.loopByTargetAndSource[tKey] = {};
+                    meta.loopByTargetAndSource[tKey][srcKey] = {
+                        target: endpoint.target,
+                        pin: endpoint.pin,
+                        pinName: endpoint.pinName,
+                        netName: endpoint.netName,
+                        key: endpoint.key
+                    };
                     const targetKey = String(endpoint.target || '').toUpperCase();
                     if (!targetKey || !loopModeSet.has(targetKey)) return;
                     if (!loopCandidatesByBucket[loopCtx.bucketKey]) loopCandidatesByBucket[loopCtx.bucketKey] = {};
                     if (!loopCandidatesByBucket[loopCtx.bucketKey][endpoint.key]) {
                         loopCandidatesByBucket[loopCtx.bucketKey][endpoint.key] = endpoint;
                     }
-                    if (!externalByLoopEndpointKey[endpoint.key]) {
-                        externalByLoopEndpointKey[endpoint.key] = external;
-                    }
+                    if (!externalByLoopEndpointKey[endpoint.key]) externalByLoopEndpointKey[endpoint.key] = [];
+                    const arr = externalByLoopEndpointKey[endpoint.key];
+                    const exists = arr.some(x => String(x.target) === String(external.target) && String(x.pin) === String(external.pin));
+                    if (!exists) arr.push(external);
                 });
             });
         });
         const loopPairMap = buildLoopPairMap(loopCandidatesByBucket);
+        Object.keys(preferredMetaByBucket).forEach(bucketKey => {
+            const meta = preferredMetaByBucket[bucketKey];
+            const tpl = {};
+            const targets = Object.keys(meta.loopByTargetAndSource || {}).sort((a, b) =>
+                a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+            );
+            const baseTarget = targets.length > 0 ? targets[0] : '';
+            const baseMap = baseTarget ? (meta.loopByTargetAndSource[baseTarget] || {}) : {};
+            const baseEndpointToSource = {};
+            Object.keys(baseMap).forEach(src => {
+                const ep = baseMap[src];
+                if (!ep || !ep.key) return;
+                baseEndpointToSource[ep.key] = src;
+            });
+            Object.keys(baseMap).forEach(src => {
+                const ep = baseMap[src];
+                if (!ep || !ep.key) return;
+                const pair = loopPairMap[ep.key];
+                const partnerKey = pair && pair.partner ? pair.partner.key : '';
+                const partnerSrc = partnerKey ? baseEndpointToSource[partnerKey] : '';
+                if (!src || !partnerSrc) return;
+                if (String(partnerSrc).toUpperCase() === String(src).toUpperCase()) return;
+                if (!tpl[src]) tpl[src] = partnerSrc;
+            });
+            templatePartnerSourceByBucket[bucketKey] = tpl;
+        });
+
+        function buildMonteCarloPartnerMapForSources(sourceMap, seedKey) {
+            const keys = Object.keys(sourceMap).sort((a, b) =>
+                a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+            );
+            const n = keys.length;
+            if (n < 2) return {};
+            const rand = makeSeededRandom(`${mcSeedText}@@SRC@@${seedKey}`);
+            const idx = Array.from({length: n}, (_, i) => i);
+            const nameByIdx = idx.map(i => String(sourceMap[keys[i]].sourcePinName || '').trim().toUpperCase());
+
+            function pairScore(i, j) {
+                const a = nameByIdx[i];
+                const b = nameByIdx[j];
+                const d = pinNameDistance(a, b);
+                if (isAdjacentPinNames(a, b)) return 1000000000 + d;
+                return d;
+            }
+            function randomPairs(size) {
+                const arr = idx.slice(0, size);
+                for (let i = arr.length - 1; i > 0; i--) {
+                    const j = Math.floor(rand() * (i + 1));
+                    const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+                }
+                const out = [];
+                for (let i = 0; i + 1 < arr.length; i += 2) out.push([arr[i], arr[i + 1]]);
+                return out;
+            }
+            function totalScore(pairs) {
+                let s = 0;
+                pairs.forEach(([a, b]) => { s += pairScore(a, b); });
+                return s;
+            }
+
+            const evenCount = n - (n % 2);
+            let best = randomPairs(evenCount);
+            let bestScore = totalScore(best);
+            let cur = best.map(p => [p[0], p[1]]);
+            let curScore = bestScore;
+            const iterations = Math.max(mcIterations, evenCount * 200);
+            for (let it = 0; it < iterations; it++) {
+                let a = Math.floor(rand() * cur.length);
+                let b = Math.floor(rand() * cur.length);
+                if (a === b) continue;
+                if (b < a) { const t = a; a = b; b = t; }
+                const [a1, a2] = cur[a];
+                const [b1, b2] = cur[b];
+                const cand1 = [[a1, b1], [a2, b2]];
+                const cand2 = [[a1, b2], [a2, b1]];
+                const before = pairScore(a1, a2) + pairScore(b1, b2);
+                const after1 = pairScore(cand1[0][0], cand1[0][1]) + pairScore(cand1[1][0], cand1[1][1]);
+                const after2 = pairScore(cand2[0][0], cand2[0][1]) + pairScore(cand2[1][0], cand2[1][1]);
+                const pick = after1 <= after2 ? cand1 : cand2;
+                const delta = Math.min(after1, after2) - before;
+                const temp = Math.max(0.01, 1 - (it / iterations));
+                if (delta > 0 && rand() >= Math.exp(-delta / temp)) continue;
+                cur[a] = pick[0];
+                cur[b] = pick[1];
+                curScore += delta;
+                if (curScore < bestScore) {
+                    bestScore = curScore;
+                    best = cur.map(p => [p[0], p[1]]);
+                }
+            }
+
+            const map = {};
+            best.forEach(([i, j]) => {
+                map[keys[i]] = keys[j];
+                map[keys[j]] = keys[i];
+            });
+            if (n % 2 === 1) {
+                const last = keys[n - 1];
+                let bestK = keys[0];
+                let bestS = Number.POSITIVE_INFINITY;
+                for (let i = 0; i < n - 1; i++) {
+                    const s = pairScore(n - 1, i);
+                    if (s < bestS) { bestS = s; bestK = keys[i]; }
+                }
+                map[last] = bestK;
+            }
+            return map;
+        }
+
+        // New fixed pairing pipeline:
+        // 1) Build source-pin set per TestCardTarget from original ASC links (preferred loop direction only).
+        // 2) Run Monte Carlo on TestCardTarget_PinName for shortest non-adjacent pairing.
+        // 3) Reuse first target's source->partner template across same terminal group.
+        // 4) loopTarget comes from partner source's original ASC link relation.
+        const targetLoopPlan = {};
+        const groupTemplateByGroup = {};
+        const orderedTargets = [...selectedTargets].sort((a, b) =>
+            String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'})
+        );
+        orderedTargets.forEach(target => {
+            if (!dPinsByPart[target]) return;
+            const tKey = String(target).toUpperCase();
+            const sourceMap = {};
+            const sortedPins = Object.keys(dPinsByPart[target]).sort((a, b) =>
+                a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+            );
+            sortedPins.forEach(pin => {
+                const pinParts = dPinsByPart[target][pin];
+                const srcPinName = getPinName(pinParts);
+                const srcNet = getNetName(pinParts);
+                const links = linkMap[`${target}__${pin}`] || [];
+                for (const link of links) {
+                    const linkPinParts = dPinsByPart[link.linkTarget] && dPinsByPart[link.linkTarget][link.linkPin]
+                        ? dPinsByPart[link.linkTarget][link.linkPin]
+                        : null;
+                    const linkPinName = linkPinParts ? getPinName(linkPinParts) : '';
+                    const linkNetName = link.linkNet || (linkPinParts ? getNetName(linkPinParts) : '');
+                    if (String(resolveMode(target, link.linkTarget)).toLowerCase() !== 'loop') continue;
+                    if (!isPreferredLoopDirection(target, link.linkTarget)) continue;
+                    const srcKey = String(srcPinName || '').trim().toUpperCase();
+                    if (!srcKey || sourceMap[srcKey]) break;
+                    sourceMap[srcKey] = {
+                        sourcePin: pin,
+                        sourcePinName: srcPinName,
+                        sourceNet: srcNet,
+                        linkedTarget: link.linkTarget,
+                        linkedPin: link.linkPin,
+                        linkedPinName: linkPinName,
+                        linkedNet: linkNetName
+                    };
+                    break;
+                }
+            });
+            const partnerBySource = buildMonteCarloPartnerMapForSources(sourceMap, tKey);
+            const groupKey = terminalGroupMap[tKey] || tKey;
+            const template = groupTemplateByGroup[groupKey];
+            const effectivePartner = {};
+            Object.keys(sourceMap).forEach(src => {
+                const desired = template && template[src] ? template[src] : partnerBySource[src];
+                if (desired && sourceMap[desired] && !isAdjacentPinNames(sourceMap[src].sourcePinName, sourceMap[desired].sourcePinName)) {
+                    effectivePartner[src] = desired;
+                } else {
+                    effectivePartner[src] = partnerBySource[src];
+                }
+            });
+            if (!groupTemplateByGroup[groupKey]) groupTemplateByGroup[groupKey] = {...effectivePartner};
+
+            targetLoopPlan[tKey] = {};
+            Object.keys(sourceMap).forEach(src => {
+                const partnerSrc = effectivePartner[src];
+                if (!partnerSrc || !sourceMap[partnerSrc]) return;
+                const partner = sourceMap[partnerSrc];
+                const source = sourceMap[src];
+                targetLoopPlan[tKey][src] = {
+                    loopLinkTarget: target,
+                    loopLinkPin: partner.sourcePin,
+                    loopLinkPinName: partner.sourcePinName,
+                    loopLinkNet: partner.sourceNet,
+                    loopTarget: partner.linkedTarget,
+                    loopTargetPin: partner.linkedPin,
+                    loopTargetPinName: partner.linkedPinName,
+                    loopTargetNet: partner.linkedNet,
+                    loopDistance: Number(pinNameDistance(source.sourcePinName, partner.sourcePinName).toFixed(2))
+                };
+            });
+        });
 
         // 3) one consolidated table per target.
         selectedTargets.forEach(target => {
@@ -1743,12 +2244,126 @@
                         : null;
                     const loopEndpoint = loopCtx ? loopCtx.endpoint : null;
                     const loopPairInfo = (loopEndpoint && loopPairMap[loopEndpoint.key]) ? loopPairMap[loopEndpoint.key] : null;
-                    const loopPair = loopPairInfo ? loopPairInfo.partner : null;
-                    const loopPairExternal = loopPair ? externalByLoopEndpointKey[loopPair.key] : null;
-                    const loopDistance = loopPairInfo ? loopPairInfo.dist : '';
+                    let loopPair = loopPairInfo ? loopPairInfo.partner : null;
+                    let loopDistance = loopPairInfo ? loopPairInfo.dist : '';
+                    const externalCandidates = loopPair ? (externalByLoopEndpointKey[loopPair.key] || []) : [];
+                    let loopPairExternal = null;
+                    const curTarget = String(target || '').toUpperCase();
+                    if (externalCandidates.length > 0) {
+                        const curGroup = terminalGroupMap[curTarget] || curTarget;
+                        loopPairExternal = externalCandidates.find(x => String(x.target || '').toUpperCase() === curTarget)
+                            || externalCandidates.find(x => (terminalGroupMap[String(x.target || '').toUpperCase()] || String(x.target || '').toUpperCase()) === curGroup)
+                            || externalCandidates[0];
+                    }
+                    if (deterministicEnabled && loopPairExternal && loopCtx && loopCtx.preferred) {
+                        const srcPinName = String(testPinName || '').trim().toUpperCase();
+                        const curTargetKey = String(target || '').toUpperCase();
+                        const tpl = templatePartnerSourceByBucket[loopCtx.bucketKey] || {};
+                        const meta = preferredMetaByBucket[loopCtx.bucketKey] || {};
+                        const byTarget = (meta.loopByTargetAndSource && meta.loopByTargetAndSource[curTargetKey]) || {};
+                        const revByTarget = {};
+                        Object.keys(byTarget).forEach(s => {
+                            const e = byTarget[s];
+                            if (e && e.key) revByTarget[e.key] = s;
+                        });
+                        const partnerSourceFromCurrent = (loopPair && loopPair.key && revByTarget[loopPair.key]) ? revByTarget[loopPair.key] : '';
+                        const partnerSource = tpl[srcPinName] || partnerSourceFromCurrent || '';
+
+                        // loopTarget / loopTarget_PinName follows MC pairing template source->partnerSource.
+                        const loopTemplateEndpoint = partnerSource ? byTarget[partnerSource] : null;
+                        if (loopTemplateEndpoint) {
+                            loopPairExternal = findPinInfoByPinName(target, partnerSource) || loopPairExternal;
+                            if (loopPairExternal) {
+                                loopPairExternal = {
+                                    target: target,
+                                    pin: loopPairExternal.pin,
+                                    pinName: loopPairExternal.pinName,
+                                    netName: loopPairExternal.netName
+                                };
+                            }
+                        }
+
+                        // same CN out and same CN back, and non-adjacent guard.
+                        if (loopPairExternal && isAdjacentPinNames(testPinName, loopPairExternal.pinName)) {
+                            const preferName = partnerSource || String(loopPairExternal.pinName || '').trim().toUpperCase();
+                            const nonAdj = findBestNonAdjacentPinOnTarget(target, preferName, testPinName);
+                            if (nonAdj) {
+                                loopPairExternal = {
+                                    target: target,
+                                    pin: nonAdj.pin,
+                                    pinName: nonAdj.pinName,
+                                    netName: nonAdj.netName
+                                };
+                            }
+                        }
+
+                        if (loopTemplateEndpoint) {
+                            // overwrite loopPair to template-consistent loop endpoint for this target
+                            loopPair = loopTemplateEndpoint;
+                            loopDistance = Number(pinNameDistance(loopEndpoint.pinName, loopPair.pinName).toFixed(2));
+                        }
+                    }
+
+                    // Hard rule (always): TestCardTarget must equal loopLinkTarget.
+                    if (isLoop && loopPairExternal) {
+                        const pinnedOnTarget =
+                            findPinInfoByPinName(target, loopPairExternal.pinName) ||
+                            findPinInfoByPinName(target, testPinName) ||
+                            findBestNonAdjacentPinOnTarget(
+                                target,
+                                String(loopPairExternal.pinName || testPinName || '').trim().toUpperCase(),
+                                testPinName
+                            );
+                        if (pinnedOnTarget) {
+                            loopPairExternal = {
+                                target: target,
+                                pin: pinnedOnTarget.pin,
+                                pinName: pinnedOnTarget.pinName,
+                                netName: pinnedOnTarget.netName
+                            };
+                        } else {
+                            loopPairExternal = {
+                                target: target,
+                                pin: '',
+                                pinName: '',
+                                netName: ''
+                            };
+                        }
+                    }
                     const baseHeaderForDistance = (loopCtx && loopCtx.preferred) ? 'LinkTarget_PinName' : 'TestCardTarget_PinName';
-                    const violatedByDistanceSource = !!(isLoop && loopEndpoint && loopPair &&
+                    let outLoopTarget = isLoop && loopPair ? loopPair.target : '';
+                    let outLoopTargetPin = isLoop && loopPair ? loopPair.pin : '';
+                    let outLoopTargetPinName = isLoop && loopPair ? loopPair.pinName : '';
+                    let outLoopTargetNet = isLoop && loopPair ? loopPair.netName : '';
+                    let outLoopLinkTarget = isLoop && loopPairExternal ? loopPairExternal.target : '';
+                    let outLoopLinkPin = isLoop && loopPairExternal ? loopPairExternal.pin : '';
+                    let outLoopLinkPinName = isLoop && loopPairExternal ? loopPairExternal.pinName : '';
+                    let outLoopLinkNet = isLoop && loopPairExternal ? loopPairExternal.netName : '';
+                    let outLoopDistance = isLoop ? loopDistance : '';
+                    let violatedByDistanceSource = !!(isLoop && loopEndpoint && loopPair &&
                         isViolationFromDistancePair(loopEndpoint.pinName, loopPair.pinName));
+                    let highlightHeaders = (isLoop && loopPair) ? [baseHeaderForDistance, 'loopTarget_PinName'] : [];
+
+                    // Override with new pipeline plan: pairing by TestCardTarget_PinName on same target.
+                    if (isLoop && loopCtx && loopCtx.preferred) {
+                        const tKey = String(target || '').toUpperCase();
+                        const srcKey = String(testPinName || '').trim().toUpperCase();
+                        const plan = targetLoopPlan[tKey] && targetLoopPlan[tKey][srcKey] ? targetLoopPlan[tKey][srcKey] : null;
+                        if (plan) {
+                            outLoopTarget = plan.loopTarget || '';
+                            outLoopTargetPin = plan.loopTargetPin || '';
+                            outLoopTargetPinName = plan.loopTargetPinName || '';
+                            outLoopTargetNet = plan.loopTargetNet || '';
+                            outLoopLinkTarget = plan.loopLinkTarget || '';
+                            outLoopLinkPin = plan.loopLinkPin || '';
+                            outLoopLinkPinName = plan.loopLinkPinName || '';
+                            outLoopLinkNet = plan.loopLinkNet || '';
+                            outLoopDistance = plan.loopDistance;
+                            violatedByDistanceSource = isViolationFromDistancePair(testPinName, outLoopLinkPinName);
+                            highlightHeaders = ['TestCardTarget_PinName', 'loopLinkTarget_PinName'];
+                        }
+                    }
+                    if (isLoop) outLoopTarget = link.linkTarget || '';
 
                     rows.push([
                         target,
@@ -1763,19 +2378,19 @@
                         link.linkPin,
                         linkPinName,
                         linkNetName,
-                        isLoop && loopPair ? loopPair.target : '',
-                        isLoop && loopPair ? loopPair.pin : '',
-                        isLoop && loopPair ? loopPair.pinName : '',
-                        isLoop && loopPair ? loopPair.netName : '',
-                        isLoop && loopPairExternal ? loopPairExternal.target : '',
-                        isLoop && loopPairExternal ? loopPairExternal.pin : '',
-                        isLoop && loopPairExternal ? loopPairExternal.pinName : '',
-                        isLoop && loopPairExternal ? loopPairExternal.netName : '',
-                        isLoop ? loopDistance : ''
+                        outLoopTarget,
+                        outLoopTargetPin,
+                        outLoopTargetPinName,
+                        outLoopTargetNet,
+                        outLoopLinkTarget,
+                        outLoopLinkPin,
+                        outLoopLinkPinName,
+                        outLoopLinkNet,
+                        outLoopDistance
                     ]);
                     rowLoopMeta.push({
                         violated: violatedByDistanceSource,
-                        highlightHeaders: (isLoop && loopPair) ? [baseHeaderForDistance, 'loopTarget_PinName'] : []
+                        highlightHeaders: highlightHeaders
                     });
                 });
             });
@@ -1880,6 +2495,7 @@
         const sortedKeys = Object.keys(globalAnalysisResults).sort();
         if (sortedKeys.length === 0) {
             container.innerHTML = "<p style='color:#aaa'>沒有資料。</p>";
+            refreshCompareControls();
             return;
         }
         // Keep checkbox state stable across re-renders.
@@ -2043,6 +2659,7 @@
             board.appendChild(section);
         });
         container.appendChild(board);
+        refreshCompareControls();
     }
 
     function getChainColorMeta(chainValue) {
